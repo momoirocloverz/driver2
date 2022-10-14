@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>水稻长势</title>
+  <!-- GIS -->
+  <link href="./plugin/gis/openlayers/6.5.0/ol.css" rel="stylesheet">
+  <script type="text/javascript" src="./plugin/gis/openlayers/6.5.0/ol.js"></script>
+  <script type="text/javascript" src="./plugin/gis/turf/5.1.6/turf.min.js"></script>
+  <!-- FNC -->
+  <script type="text/javascript" src="./plugin/gis/acol/1.2.0/acol.min.js"></script>
+  <script type="text/javascript" src="./plugin/js/message.js"></script>
+  <!-- DATA -->
+  <script type="text/javascript" src="./data/geoJson/data.js"></script>
+  <style>
+   .legend {
+    background: url(/data/image/legend_bg.png);
+    background-size: 100% 100%;
+    border: 1px solid #177DE6;
+    position: absolute;
+    left: 5%;
+    bottom: 5%;
+    z-index: 1;
+    padding: 24px 72px 24px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+   }
+   .legend .item {
+    font-size: 16px;
+    color: #CCEAFF;
+    line-height: 22px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+   }
+
+   .legend .item img{
+    width: 24px;
+    height: 24px;
+   }
+
+   .pop {
+    background: url(./data/image/pop_bg.png);
+    background-size: 100% 100%;
+    width: 600px;
+    height: 220px;
+    display: none;
+    padding-top: 60px;
+   }
+   
+   .pop .title {
+    height: 36px; 
+    background: linear-gradient(270deg, rgba(51,143,249,0) 0%, rgba(51,143,249,0.56) 81%, rgba(51,143,249,0) 100%);
+    color: #fff;
+    line-height: 36px;
+    padding-left: 24px;
+    margin-left: 163px;
+    font-size: 20px;
+    width: 320px;
+   }
+   .pop .title .close::after,.close::before{
+    content: ' ';
+    width: 2px;
+    height: 18px;
+    background: rgb(255, 255, 255, 0.8);
+    position: absolute;
+    right: 58px;
+    top: 60px;
+    cursor: pointer;
+   }
+   .pop .title .close::after {
+    transform: rotate(45deg);
+   }
+   .pop .title .close::before {
+    transform: rotate(-45deg);
+   }
+   .pop .list {
+    display: flex;
+    flex-direction: column;
+    font-size: 14px;
+    line-height: 20px;
+    margin-left: 163px;
+    margin-top: 18px;
+    gap: 12px;
+   }
+   .pop .list p{
+    display: flex;
+    gap: 54px;
+    margin: 0px;
+   }
+   .pop .list p span:nth-of-type(1){
+    color:#00DEFF;
+   }
+   .pop .list p span:nth-of-type(2){
+    color:#fff;
+   }
+  </style>
+</head>
+<body style=" margin: 0;overflow: hidden;background-color: transparent;width: 100%;height:100%;">
+  <div id="map" style="margin:0 auto;width: 100%;height: 100%; background-color: transparent;border:rgba(255,255,255,0);position: absolute;top: 0;"></div>
+  <div class="pop" id="infoWindow">
+    <div>
+      <div class="title">
+        <span></span>
+        <div class="close" onclick="closePop()"></div>
+      </div>
+      <div class="list">
+        <p>
+          <span>详细地址：</span>
+          <span></span>
+        </p>
+        <p>
+          <span>联系电话：</span>
+          <span></span>
+        </p>
+        <p>
+          <span>营业状态：</span>
+          <span>正在营业</span>
+        </p>
+        <p>
+          <span>经营范围：</span>
+          <span></span>
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="legend">
+    <div class="item">
+      <img src="./data/image/1.png" alt="">
+      <span>健壮</span>
+    </div>
+    <div class="item">
+      <img src="./data/image/2.png" alt="">
+      <span>良好</span>
+    </div>
+    <div class="item">
+      <img src="./data/image/3.png" alt="">
+      <span>较差</span>
+    </div>
+    <div class="item">
+      <img src="./data/image/NJ.png" alt="">
+      <span>农机</span>
+    </div>
+    <div class="item">
+      <img src="./data/image/FY.png" alt="">
+      <span>肥药</span>
+    </div>
+  </div>
+  <script type="text/javascript">
+    // 压缩数据解密
+    const geoJsonData_city = new acol_dea().decodeGeoJson({ data: geoJsonData_city1 });
+    const geoJsonData_county = new acol_dea().decodeGeoJson({ data: geoJsonData_county1 });
+    const geoJsonData_town = new acol_dea().decodeGeoJson({ data: geoJsonData_town1 });
+    const feature_point = new ol.format.GeoJSON().readFeatures(geoJsonData_point);
+    // 地图变量定义
+    let acMap, acolLayer,acolUtil = new acol_util(), acolSearch = new acol_search();;
+    let vector_back, vector_area, vector_P, img_layer, overLayer, vector_HL;
+    let res_json;
+    // 初始化
+    init();
+
+    /**
+     * 初始化方法
+     */
+    function init() {
+      // 初始化地图
+      acMap = new acol_map();
+      acMap.initMap({ id: 'map', center: [121.575210988279, 29.7373630365816], zoom: 10, maxZoom: 18, constrainResolution: false });
+      // 定义图层变量
+      acolLayer = acMap.acolLayer;
+      // 添加天地图
+      addImgLayer();
+      // 添加矢量图层
+      addVectorLayer();
+      // 添加wms图层
+      addWMSLayer();
+      // 添加背景层
+      addBackLayer();
+      // 缩放全图
+      panTotown();
+      addPopupByElement(document.getElementById("infoWindow"));
+
+      // initInfo消息交互
+				let message = { 'key': 'initInfo','value': { 'initType': true } };
+				sendMessage('gisMapMessage', message);
+
+      // 注册鼠标单击事件
+      acMap.mapEventOn(clickCallBack,"LEFT_CLICK");
+    }
+    /**
+     * 单击事件回调函数
+     * @param {Object} e
+     */
+    async function clickCallBack(e){
+      let features = acMap.map.getFeaturesAtPixel(e.pixel);
+      if(features.length === 3 && features[0].getGeometry().getType() == 'Point') {
+        let properties = features[0].getProperties();
+        // features[0].getGeometry().getCoordinates();
+        openPopByInfo(properties,features[0].getGeometry().getCoordinates())
+      }
+      else if(features.length === 1){
+        vector_buffer.getSource().clear();
+        vector_P.getSource().clear();
+        vector_HL.getSource().clear();
+        closePop();
+      }
+    }
+    /**
+     * 打开气泡弹窗
+     */
+    function openPopByInfo (info,lonlat){
+
+      let node = document.getElementById('infoWindow');
+      document.getElementsByClassName("title")[0].children[0].innerText = info.name;
+      document.getElementsByClassName("list")[0].children[0].children[1].innerText = info.address;
+      document.getElementsByClassName("list")[0].children[1].children[1].innerText = info.phone;
+      document.getElementsByClassName("list")[0].children[3].children[1].innerText = info.fw;
+      // node.style.display = 'none';// 隐藏选择的元素
+      node.style.display = 'block';// 以块级样式显示
+      overLayer.setPosition(lonlat);
+    }
+    /**
+     * 创建叠加图层
+     * @param {Object} element
+     */
+    function addPopupByElement(element){
+      if(new acol_layer(acMap.map).getOverlayById("infoWindow")) new acol_layer(acMap.map).removeOverlayById("infoWindow");
+      // 添加overLayer图层
+      overLayer = new acol_layer(acMap.map).overLayer({id:"infoWindow",element:element,offset:[-20,-240],positioning:"top-left"});
+      acMap.map.addOverlay(overLayer);
+    }
+    /**
+     * 关闭弹窗
+     **/
+    function closePop (){
+      document.getElementById('infoWindow').style.display = 'none';
+    }
+    /**
+     * 添加底图图层
+     */
+    function addImgLayer() {
+      img_layer = acolLayer.imageLayer({
+        name: '图像图层',
+        imageUrl: './data/image/slbk_small.png',
+        extent: [120.874545, 28.855900, 122.275876, 30.418826],
+        zIndex: 2
+      });
+      acMap.addLayer(img_layer);
+    }
+    /**
+     * 裁剪添加背景层
+     */
+    function addBackLayer() {
+      // 图层掩膜
+			acolLayer.layerMaskByGeoJson({ layer: img_layer, data: geoJsonData_city });
+			// 矢量偏移、裁剪
+			let res_data = acolUtil.geoJsonTransformTranslate({ data: geoJsonData_city, distance: 2, direction: 180 });
+			let diff_data = acolUtil.differenceByTurf(res_data, geoJsonData_city);
+			// 添加矢量要素，geoJson -> feature
+			let backFeatures = new ol.format.GeoJSON().readFeatures(diff_data, { featureProjection: 'EPSG:4326' });
+			vector_back.getSource().addFeatures(backFeatures); 
+    }
+    /**
+     * 添加矢量图层
+     */
+    function addVectorLayer() {
+      vector_back =  acolLayer.vectorLayer({
+        name: 'back',
+        type: 'polygon',
+        style:{
+          fill: { 
+            color: 'rgba(18,79,167,1)',
+          },
+          stroke: {
+            color: 'rgba(18,79,167,0.4)', 
+            width: 6,
+          }
+        },
+        zIndex: 1
+      });
+      vector_area = acolLayer.vectorLayer({
+        name: 'area',
+        type: 'polygon',
+        dataOption: {
+						data: geoJsonData_county,
+					},
+        style: {
+          fill:{"color":"rgba(21,81,143,0)"},
+          stroke:{"color":"rgba(129,245,252, 1)","width":2}
+        },
+        zIndex: 3
+      });
+      vector_buffer = acolLayer.vectorLayer({
+        name: 'buffer',
+        type: 'polygon',
+        style:{
+          fill: {
+            color: 'rgba(0, 25, 62, 0.5)'
+          },
+          stroke: {
+            color: 'rgba(144, 244, 255, 0.8)',
+            width: 2
+          }
+        },
+        zIndex: 5
+      })
+      vector_P = new ol.layer.Vector({
+					name: 'point',
+					type: 'point',
+					source: new ol.source.Vector({
+						projection: 'EPSG:4326',
+					}),
+					style: function(feature){
+						let style_temp = new ol.style.Style({
+							image: new ol.style.Icon({
+								src: "./data/image/"+ feature.get("type") +".png"
+							})
+						});
+						return style_temp;
+					},
+        minZoom: 10,
+        zIndex: 6
+			});
+      vector_HL = acolLayer.vectorLayer({
+        name: 'heigh',
+        type: 'polygon',
+        style: {
+          fill: {
+            color: 'rgba(0, 255, 255, 0.5)'
+          },
+          stroke: {
+            color: 'rgba(0, 255, 255, 1)',
+            width: 3
+          }
+        },
+        zIndex:5
+      })
+      acMap.addLayers([vector_back,vector_area,vector_buffer,vector_P,vector_HL]);
+    }
+    /**
+     * 加载wms图层
+     */
+    function addWMSLayer() {
+      let mapUrl = "https://geoserver.zjsszxc.com/geoserver/NBJSC/wms";
+      let wmsLayer_sd = acolLayer.wmsLayer({ name: '水稻长势', mapUrl: mapUrl, mapName: 'NBJSC:水稻长势模拟数据', zIndex: 4, tiled: true });
+      acMap.addLayer(wmsLayer_sd);
+    }
+    /**
+     * 缩放定位到最大单边界
+     */
+      function panTotown(){
+      // 根据extent范围缩放定位
+      new acol_layer(acMap.map).panToByExtent({
+        extent: vector_area.getSource().getExtent(),
+        duration: 1000
+      });
+    }
+    /**
+     * 选择图斑，添加缓冲区
+     */
+    function addBuffer() {
+      // 清除缓冲区
+      vector_buffer.getSource().clear();
+      vector_P.getSource().clear();
+      vector_HL.getSource().clear();
+      // 创建缓冲区
+      const center = turf.center(res_json);
+      const turf_buffered = turf.buffer(turf.point(center.geometry.coordinates), 3, {units: 'kilometers'});
+      const buffered = new ol.format.GeoJSON().readFeatures(turf_buffered);
+      vector_buffer.getSource().addFeatures(buffered);
+      // 添加范围内点坐标
+      // todo临时写法，后续换成根据范围搜索显示icon！！！！！！！！！！！！
+      vector_P.getSource().addFeatures(feature_point);
+
+      // 缩放到缓冲区
+      new acol_layer(acMap.map).panToByExtent({
+        extent: vector_buffer.getSource().getExtent(),
+        duration: 1000
+      });
+    }
+    /**
+     * 定位到选中图斑
+     */
+    function panToSelect(id) {
+      creatWFSSearch(id);
+    }
+    /**
+     * 构建WFS查询条件
+     */
+    async function creatWFSSearch(id) {
+      // 设置查询条件
+      let featureRequest = new ol.format.WFS().writeGetFeature({
+        srsName: 'EPSG:4326',
+        featureNS: 'NBJSC', //URI
+        featureTypes: ['NBJSC:水稻长势模拟数据'],
+        outputFormat: 'application/json',
+        filter: ol.format.filter.equalTo('ID', id)
+      });
+
+      // 请求结果
+      await fetch('https://geoserver.zjsszxc.com/geoserver/wfs',{
+        method: 'POST',
+        body: new XMLSerializer().serializeToString(featureRequest),
+      }).then(function (response) {
+        return response.json();
+      }).then(function(json) {
+        res_json = json;
+        // 请求到的feature
+        let features = new ol.format.GeoJSON().readFeatures(res_json);
+        // 请求到数据后添加buffer
+        addBuffer();
+        vector_HL.getSource().addFeatures(features);
+      })
+    }
+  </script>
+</body>
+</html>

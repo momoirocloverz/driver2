@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <title>水稻长势</title>
+	<!-- WEB -->
+	<script type="text/javascript" src="./plugin/web/jquery/jquery.min.js"></script>
+	<link href="./plugin/web/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+	<script type="text/javascript" src="./plugin/web/bootstrap/js/bootstrap.min.js"></script>
+	<style type="text/css">
+		#toolbar {
+			position: absolute;
+			top: 20px;
+			left: 20px;
+			width: 260px;
+			text-align: center;
+			z-index: 9999;
+			border-radius: 4px;
+		}
+	</style>
+    <script type="text/javascript">
+		if (window.addEventListener) {
+		    //为window注册message事件并绑定监听函数
+		    window.addEventListener('message', receiveMsg, false);
+		}else {
+		    window.attachEvent('message', receiveMsg);
+		}
+		//监听函数，接收一个参数--Event事件对象
+		function receiveMsg(e) {
+			let obj = e.data;
+		    // 地图交互消息监听
+		    if(obj.type == "gisMapMessage"){
+		    	if(obj.data.key == "initInfo" && obj.data.value){
+					// initType为true时，map初始化成功
+		    		console.log("initInfo交互---地图加载完成",obj.data.value.initType);
+		    	}
+		    }
+		}
+		// 发送消息
+		function sendMessage(type,data){
+			// 向子页面传递消息
+			let iframe = document.getElementById("gisIframe");
+			iframe.contentWindow.postMessage({type: type, data: data}, '*');
+		}
+	</script>
+</head>
+<body style="margin:0;overflow:hidden;width:100%;height:100%;position:absolute;top:0;background-color:transparent;">
+<div id="toolbar" class="panel panel-primary">
+	<div class='panel-heading'>
+		<h5 class='panel-title text-center'>功能交互</h5>
+	</div>
+	<div class='panel-body content'>
+		<input type="button" class="btn btn-default" onclick="panTo(1)" value="定位图斑"></input>
+	</div>
+</div>
+<iframe id="gisIframe" src="./LSPT_SDZS.html" style="width:100%;height:100%;background-color:transparent;border:rgba(255,255,255,0);"></iframe>
+	<script>
+		function panTo(id) {
+      let message = { "key": "panToSelect", "value": { "id": id } };
+			sendMessage('gisLayerMessage', message);
+    }
+	</script>
+</html>

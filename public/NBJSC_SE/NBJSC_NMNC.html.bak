@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<title>NBJSC_NMNC(农民农村)</title>
+		<!-- WEB -->
+		<script type="text/javascript" src="./plugin/web/jquery/jquery.min.js"></script>
+		<!-- GIS -->
+		<link href="./plugin/gis/openlayers/6.5.0/ol.css" rel="stylesheet">
+		<script type="text/javascript" src="./plugin/gis/openlayers/6.5.0/ol.js"></script>
+		<script type="text/javascript" src="./plugin/gis/turf/5.1.6/turf.min.js"></script>
+		<!-- FNC -->
+		<script type="text/javascript" src="./plugin/gis/acol/1.1.0/acol.min.js"></script>
+		<script type="text/javascript" src="./plugin/js/NMNC/message.js"></script>
+		<!-- DATA -->
+		<script type="text/javascript" src="./data/geoJson/NMNC/data.js"></script>
+		<script type="text/javascript" src="./data/geoJson/NMNC/cz.js"></script>
+		<style type="text/css">
+		</style>
+	</head>
+	<body style=" margin: 0;overflow: hidden;background-color: transparent;width: 100%;height:100%;position: absolute;top: 0;">
+		<div id="map" style="margin:0 auto;width: 100%;height: 100%; background-color: transparent;border:rgba(255,255,255,0);"></div>
+		<script type="text/javascript">
+			// 数据解密
+			const geoJsonData_town = new acol_dea().decodeGeoJson({ data: geoJsonData_town1 });
+			const geoJsonData_county = new acol_dea().decodeGeoJson({ data: geoJsonData_county1 });
+			const geoJsonData_city = new acol_dea().decodeGeoJson({ data: geoJsonData_city1 });
+			
+			// 地图map对象
+			let acMap, vector, vector_HL;
+			let vector_CZ, vector_SFZ, vector_SFZ_P, vector_SFD, vector_SFD_P;
+			// 全局变量
+			let acolLayer, acolUtil, acolSearch, acolMeasure;
+			let tdtType = 'img';
+			let areaName = '';
+			let areaLevel = '';
+			// 矢量要素
+			let geoJson_area = null;
+			let geoJson_areaNext = null;
+			let geoJson_areaPoints = null;
+			let geoJson_areaLine = null;
+			// 其他
+			let lastFeature;
+			let currentAreaInfo;
+			let zoom, lastRange = 0;
+			let isMeasureDrawing = false;
+			
+			let cz_obj = {
+				'新时代美丽乡村达标村': 'ML',
+				'未来乡村': 'WL',
+				'小集镇式中心村': 'XJ',
+				'梳理式改造村': 'SL',
+				'省特色精品村': 'ST'
+			}
+			let cz_color = {
+				'ML': 'rgba(3, 84, 177, 1)',
+				'WL': 'rgba(93, 120, 18, 1)',
+				'XJ': 'rgba(19, 112, 100, 1)',
+				'SL': 'rgba(130, 105, 27, 1)',
+				'ST': 'rgba(86, 63, 112, 1)'
+			}
+			// 图层配置信息
+			let layerObj = {
+				'村庄': '',
+				'示范镇': false,
+				'示范带': false,
+			};
+			
+			init();
+			
+			/**
+			 * 初始化方法
+			 */
+			function init(){
+				// acMap对象
+				acMap = new acol_map();
+				acMap.initMap({ id: 'map',center: [121.575210988279, 29.6373630365816], zoom: 10, minZoom: 9, maxZoom: 18, constrainResolution: true });
+				// acol_layer
+				acolLayer = new acol_layer(acMap.map);
+				acolUtil = new acol_util();
+				acolSearch = new acol_search();
+				// 量测初始化
+				acolMeasure = new acol_measure(acMap.map);
+				acolMeasure.measureInit({ color: '#FFAC1D' });
+				
+				// 添加矢量面数据图层
+				addVectorLayer();
+				
+				// 添加要素选择器
+				let mapSelect = new ol.interaction.Select();
+				acMap.map.addInteraction(mapSelect);
+				mapSelect.on('select', function(e){
+					this.getFeatures().clear();	
+					if(!e.selected.length) return;
+					if(isMeasureDrawing) return;
+					
+					// 获取参数
+					let props = e.selected[0].getProperties();
+					if(props['TYPE'] == 'HLLayer'){
+						changeAreaByName(props['NAME']);
+						
+					}else if(props['type'] === 'village'){
+						// 当前区划信息
+						currentAreaInfo = acolUtil.FPconversion(props);
+						sendAreaInfoMessage(currentAreaInfo);
+						
+						// 平移定位
+						acMap.map.getView().animate({
+							zoom: (zoom < 18) ? zoom + 1 : zoom,
+							center: props.geometry.flatCoordinates,
+							duration: 500
+						});
+					}else if((props['type'] === 'SFZ_P') || (props['type'] === 'SFD_P')){
+						let message = {
+							'key': 'pointInfo',
+							'value': {
+								'pointInfo': new acol_util().FPconversion(props)
+							}
+						};
+						sendMessage('gisLayerMessage', message);
+					}
+				});
+				// 注册鼠标滚轮事件
+				acMap.mapEventOn(function(e){
+					// 地图比例尺等级监听
+					zoom = e.map.getView().getZoom();
+					//console.log('-------- zoom -------',zoom);
+					if(zoom <= 11){
+						if(lastRange === 1) return;
+						lastRange = 1;	
+						// 条件
+						switch(areaLevel){
+							case 'city':
+								let res_feature = (getFeaturesByName(areaName));
+								if(res_feature) addFeaturesByObj(res_feature);
+								break;
+							default:
+								break;	
+						}
+						lastFeature = null;
+						acMap.showLayer(vector_HL);
+					}else if(zoom <= 13){
+						if(lastRange === 2) return;
+						lastRange = 2;
+						// 条件
+						switch(areaLevel){
+							case 'city':
+								addFeaturesByObj({
+									geoJson_areaNext: geoJsonData_town,
+									geoJson_areaPoints: null,
+									geoJson_CZ: geoJsonData_town_p,
+								});
+								break;
+							case 'county':
+								addFeaturesByObj({
+									geoJson_areaNext: acolSearch.getGeoJsonFeaturesByKV(geoJsonData_town, 'P_NAME', areaName),
+									geoJson_areaPoints: null,
+									geoJson_CZ: acolSearch.getGeoJsonFeaturesByKV(geoJsonData_town_p, 'P_NAME', areaName),
+								});
+								break;
+							default:
+								break;	
+						}
+						lastFeature = null;
+						acMap.showLayer(vector_HL);
+					}else{
+						if(lastRange === 3) return;
+						lastRange = 3;
+						// 条件
+						switch(areaLevel){
+							case 'city':
+								addFeaturesByObj({
+									geoJson_areaNext: null,
+									geoJson_areaPoints: geoJsonData_village
+								});
+								break;
+							case 'county':
+								addFeaturesByObj({
+									geoJson_areaNext: null,
+									geoJson_areaPoints: acolSearch.getGeoJsonFeaturesByKV(geoJsonData_village, 'COUNTY', areaName)
+								});
+								break;
+							default:
+								break;	
+						}
+						lastFeature = null;
+						acMap.hideLayer(vector_HL);
+					}
+				},'MOUSE_WHEEL');
+				
+				// 添加鼠标移动事件
+				acMap.mapEventOn(function(e){
+					// 屏幕坐标点获取要素
+					let features = acMap.map.getFeaturesAtPixel(e.pixel);
+					if(features.length){
+						if(isMeasureDrawing) return;
+						
+						if(lastFeature != features[0]){
+							// SFZ,SFD
+							if((features[0].getProperties()['type'] === 'SFZ') || (features[0].getProperties()['type'] === 'SFD')){
+								acMap.map.getTargetElement().style.cursor = 'pointer';
+								return;
+							}
+							if(['city', 'county'].indexOf(areaLevel) != -1){
+								lastFeature = features[0].clone();
+								lastFeature.setProperties({ 'TYPE': 'HLLayer' });
+								// 添加要素前先清空图层
+								vector_HL.getSource().clear();
+								vector_HL.getSource().addFeatures([lastFeature]);
+								// 光标样式
+								if(lastRange === 3){
+									if(features[0].getProperties()['type'] === 'village'){
+										acMap.map.getTargetElement().style.cursor = 'pointer';
+									}else{
+										acMap.map.getTargetElement().style.cursor = 'auto';
+									}
+								}else{
+									acMap.map.getTargetElement().style.cursor = 'pointer';
+								} 
+							}else{
+								if(features[0].getProperties()['type'] === 'village'){
+									acMap.map.getTargetElement().style.cursor = 'pointer';
+								}else{
+									acMap.map.getTargetElement().style.cursor = 'auto';
+								}
+							}
+						}
+					}else{
+						vector_HL.getSource().clear();
+						lastFeature = null;
+						acMap.map.getTargetElement().style.cursor = 'auto';
+					}
+				}, 'MOUSE_MOVE');
+				
+				// initInfo消息交互
+				let message = { 'key': 'initInfo','value': { 'initType': true } };
+				sendMessage('gisMapMessage',message);
+			}
+			/**
+			 * 选择量测类型
+			 * @param {String} type
+			 */
+			function measureByType(type){
+				//console.log('--- measureByType ---', type);
+				
+				isMeasureDrawing = true;
+				acolMeasure.addInteractionByType(type, ({ measureType, measureResult }) => {
+					// 距离量测单位：米(m)，面积量测单位：平方米(㎡)
+					let message = { 'key': 'measureByType', 'value': { 'measureType': measureType, 'measureResult': measureResult } };
+					sendMessage('gisMapMessage',message);
+				});
+			}
+			/**
+			 * 关闭量测功能
+			 */
+			function closeMeasure(){
+				acolMeasure.closeInteraction();
+				
+				isMeasureDrawing = false;
+			}
+			/**
+			 * 清除量测结果
+			 */
+			function clearMeasure(){
+				acolMeasure.clearDrawFeatures();
+			}
+			/**
+			 * 根据类型修改天地图服务
+			 * @param {String} type
+			 */
+			function changeTDTLayerByType(type){
+				tdtMaskByFeature(type);
+			}
+			/**
+			 * 返回上级区划
+			 */
+			function lastArea(){
+				if(currentAreaInfo['type'] != 'city'){
+					changeAreaByName(currentAreaInfo['P_NAME']);
+				}else{
+					changeAreaByName(currentAreaInfo['NAME']);
+				}
+			}
+			/**
+			 * 根据名称修改区划
+			 * @param {String>} name
+			 */
+			function changeAreaByName(name){
+				let view = acMap.map.getView();
+				view.setMaxZoom(18);
+				view.setMinZoom(9);
+				
+				// 要素
+				let featureArr = [];
+				geoJson_area = null;
+				
+				// 根据行政区划名称获取要素信息
+				let res_feature = (getFeaturesByName(name));
+				if(geoJson_area){
+					// 当前区划信息
+					currentAreaInfo = geoJson_area.features[0].properties;
+					sendAreaInfoMessage(currentAreaInfo);
+					
+					if(res_feature) addFeaturesByObj(res_feature);
+					
+					// 天地图掩膜
+					tdtMaskByFeature(tdtType);
+					
+					// 修改图层
+					changeLayerByOption({ obj: layerObj });
+					
+					// 根据extent定位
+					if(areaLevel === 'city'){
+						view.setCenter([121.575210988279, 29.7373630365816]);
+						view.setZoom(10);
+					}else if(['county', 'town'].indexOf(areaLevel) != -1){
+						acolLayer.panToByExtent({
+							// 加入粮功区extent逻辑
+							extent: vector.getSource().getExtent(),
+							duration: 500
+						}, () => {
+							view.setMinZoom(view.getZoom() - 1);
+						});
+					}
+				}
+			}
+			/**
+			 * 天地图图层掩膜
+			 */
+			function tdtMaskByFeature(type){
+				tdtType = type;
+				acMap.removeLayerByNames(['tdt_layer', 'tdt_label']);
+				// TDT
+				let tdt_layer;
+				let tdt_label;
+				if(type === 'img'){
+					tdt_layer = getNBTDTByType('img');
+					tdt_label = getNBTDTByType('label');
+					tdt_label.setZIndex(3);
+					tdt_label.setOpacity(0.01);
+				}else{
+					// 'key':'6a4522498e001c6ec374d880898dfacd'，'key':'887589c1776c20e51814bbd9009666d0'
+					tdt_layer = acolLayer.tdtLayer({ name: 'tdt_layer', type: tdtType, sourceType: 'XYZ', isLabel: false, zIndex: 0 });
+					tdt_label = acolLayer.tdtLayer({ name: 'tdt_label', type: tdtType, opacity: 0.01, sourceType: 'XYZ', isLabel: true, zIndex: 3 });
+				}
+				// 天地图掩膜，掩膜最上层图层即可
+				acolLayer.tdtLayerMaskByGeoJson({ layer: tdt_layer, data: geoJson_area });
+				acolLayer.tdtLayerMaskByGeoJson({ layer: tdt_label, data: geoJson_area });
+				acMap.addLayers([tdt_layer, tdt_label]);
+				// 图层修改标签样式
+				//vector.getSource().changed();
+				tdt_layer.setExtent(acolUtil.geoJsonBboxByTurf(geoJson_area));
+				tdt_label.setExtent(acolUtil.geoJsonBboxByTurf(geoJson_area));
+			}
+			/**
+			 * 加载宁波天地图服务
+			 */
+			function getNBTDTByType(type){
+				// 坐标系
+				let projection = ol.proj.get('EPSG:4326');
+				let projectionExtent = projection.getExtent();
+				// 比例尺
+				let resolutions = [0.703125, 0.3515625, 0.17578125, 0.087890625, 0.0439453125, 0.02197265625, 0.010986328125, 0.0054931640625, 0.00274658203125, 0.001373291015625, 0.0006866455078125, 0.00034332275390625, 0.000171661376953125, 0.0000858306884765625, 0.00004291534423828125, 0.000021457672119140625, 0.000010728836059570312, 0.000005364418029785156];
+				let matrixIds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
+				// 初始化图层
+				return new ol.layer.Tile({
+					name: (type === 'img') ? 'tdt_layer' : 'tdt_label',
+					type: 'tdtLayer',
+					source: new ol.source.WMTS({
+						//url: (type === 'img') ? 'https://www.nbmap.gov.cn/wmts/nbrmap202111' : 'https://www.nbmap.gov.cn/wmts/nbrmapannols', 
+						url: (type === 'img') ? 'https://www.nbmap.gov.cn/wmts/nbrmap202203' : 'https://www.nbmap.gov.cn/wmts/nbrmapannols', 
+						format: 'tiles',
+						projection: projection,
+						tileGrid: new ol.tilegrid.WMTS({
+							origin: ol.extent.getTopLeft(projectionExtent),
+							resolutions: resolutions,
+							matrixIds: matrixIds
+						}), 
+						style: 'default',
+						wrapX: true
+					}),
+					zIndex: (type === 'img') ? 0 : 4,
+				});
+			}
+			/**
+			 * 加载矢量数据图层
+			 */
+			function addVectorLayer(){
+				// 矢量区划图层
+				vector = new ol.layer.Vector({
+					name: 'area',
+					type: 'polygon',
+					source: new ol.source.Vector({
+						projection: 'EPSG:4326',
+					}),
+					style: function(feature){
+						let style_temp = new ol.style.Style({
+							fill: new ol.style.Fill({ color: 'rgba(32, 178, 170, 0.01)' }),
+							stroke: new ol.style.Stroke({ color: 'rgba(109, 240, 249, 1)', 'width': 1 }),
+							text: new ol.style.Text({
+								text: feature.get('NAME'),
+								font: '18px Calibri',
+								overflow: false,
+								fill: new ol.style.Fill({ color: 'rgba(255, 255, 255, 1)' }),
+								stroke: (tdtType === 'img') ? new ol.style.Stroke({ color: 'rgba(109, 240, 249, 1)', width: 1 }) : new ol.style.Stroke({ color: 'rgba(0, 0, 0, 1)', width: 3 }),
+								offsetY: 0,
+								backgroundStroke: (feature.get(cz_obj[layerObj['村庄']])) ? new ol.style.Stroke({ 'color': 'rgba(255, 255, 0, 1)', 'width': 2 }) : new ol.style.Stroke({ color: 'rgba(0, 191, 255, 0.01)', width: 1 }),
+								backgroundFill: new ol.style.Fill({ color: 'rgba(0, 191, 255, 0.01)' }),
+								padding: [2, 1, 1, 2]
+							})
+						});
+						return style_temp;
+					},
+					zIndex: 5,
+					declutter: false
+				});
+				// 村庄图层
+				vector_CZ = new ol.layer.Vector({
+					name: 'vector_CZ',
+					type: 'polygon',
+					source: new ol.source.Vector({
+						projection: 'EPSG:4326',
+					}),
+					style: function(feature){
+						let style_temp = new ol.style.Style({
+							image: feature.get(cz_obj[layerObj['村庄']] + '_C') ? new ol.style.Circle({
+								radius: 18,
+								fill:  new ol.style.Fill({ 'color': cz_color[cz_obj[layerObj['村庄']]] }), 
+								stroke: new ol.style.Stroke({ 'color': 'rgba(255, 255, 255, 1)', 'width': 2 }),
+								displacement: [0, -30]
+							}) : null,
+							text: feature.get(cz_obj[layerObj['村庄']] + '_C') ? new ol.style.Text({
+								text: feature.get(cz_obj[layerObj['村庄']] + '_C')+'',
+								font: '20px Calibri',
+								overflow: true,
+								fill: new ol.style.Fill({ 'color': 'rgba(255, 255, 255, 1)' }),
+								stroke: new ol.style.Stroke({ 'color': 'rgba(255, 255, 255, 1)', 'width': 1 }),
+								offsetX: 0,
+								offsetY: 30,
+							}) : null
+						});
+						return style_temp;
+					},
+					zIndex: 5,
+					declutter: true
+				});
+				// 示范镇
+				vector_SFZ = acolLayer.vectorLayer({
+					name: 'vector_SFZ',
+					type: 'polygon',
+					style:{
+						fill:{color: 'rgba(65, 105, 225, 0.4)'},
+						stroke:{
+							color: 'rgba(65, 105, 225, 1)',
+							width: 2,
+						},
+					},
+					zIndex: 5,
+				});
+				// 示范带
+				vector_SFD = acolLayer.vectorLayer({
+					name: 'vector_SFD',
+					type: 'polygon',
+					style:{
+						fill:{color: 'rgba(219, 112, 147, 0.4)'},
+						stroke:{
+							color: 'rgba(219, 112, 147, 1)',
+							width: 2,
+						},
+					},
+					zIndex: 5,
+				});
+				// 示范镇 - 点
+				vector_SFZ_P = acolLayer.vectorLayer({
+					name: 'vector_SFZ_P',
+					type: 'point',
+					style:{
+						icon: {
+							src: './data/image/NMNC/SFZ.png',
+							anchor: [0.5, 1.2],
+							scale: 0.8
+						}
+					},
+					zIndex: 7,
+				});
+				// 示范带 - 点
+				vector_SFD_P = acolLayer.vectorLayer({
+					name: 'vector_SFD_P',
+					type: 'point',
+					style:{
+						icon: {
+							src: './data/image/NMNC/SFD.png',
+							anchor: [0.5, 1.2],
+							scale: 0.8
+						}
+					},
+					zIndex: 7,
+				});
+				// 高亮图层
+				vector_HL = acolLayer.vectorLayer({
+					name: 'area_HL',
+					type: 'polygon',
+					style:{
+						fill:{ color: 'rgba(0, 255, 255, 0.2)' },
+						stroke:{
+							color: 'rgba(0, 255, 255, 1)',
+							width: 3,
+							lineCap: 'square',
+							lineDash: [3, 5],
+						},
+					},
+					zIndex: 6,
+				});
+				// 添加图层
+				acMap.addLayers([vector_SFZ, vector_SFD, vector, vector_CZ, vector_HL, vector_SFZ_P, vector_SFD_P]);
+			}
+			/**
+			 * 获取区划等级
+			 * @param {String} name
+			 */
+			function getAreaLevelByName(name){
+				if(!name) return null;
+				if(name === '宁波市'){
+					return 'city';
+				}else if(['海曙区', '江北区', '北仑区', '镇海区', '鄞州区', '奉化区', '象山县', '宁海县', '余姚市', '慈溪市'].indexOf(name) != -1){
+					return 'county';
+				}
+				return 'town';
+			}
+			/**
+			 * 根据区划名称获取要素
+			 * @param {String} name
+			 */
+			function getFeaturesByName(name){
+				// 根据行政区划等级判断执行逻辑
+				switch(getAreaLevelByName(name)){
+					case 'city':
+						areaName = name;
+					    areaLevel = 'city';
+						geoJson_area = geoJsonData_city;
+						geoJson_areaNext = acolSearch.getGeoJsonFeaturesByKV(geoJsonData_county, 'P_NAME', name);
+						geoJson_areaPoints = null;
+						geoJson_CZ = acolSearch.getGeoJsonFeaturesByKV(geoJsonData_county_p, 'P_NAME', name);
+						
+						return { geoJson_areaNext: geoJson_areaNext, geoJson_areaPoints: geoJson_areaPoints, geoJson_CZ: geoJson_CZ };
+					case 'county':
+						areaName = name;
+						areaLevel = 'county';
+						geoJson_area = acolSearch.getGeoJsonFeaturesByKV(geoJsonData_county, 'NAME', name);
+						geoJson_areaNext = acolSearch.getGeoJsonFeaturesByKV(geoJsonData_town, 'P_NAME', name);
+						geoJson_areaPoints = null;
+						geoJson_CZ = acolSearch.getGeoJsonFeaturesByKV(geoJsonData_town_p, 'P_NAME', name);
+						
+						return { geoJson_areaNext: geoJson_areaNext, geoJson_areaPoints: geoJson_areaPoints, geoJson_CZ: geoJson_CZ };
+					case 'town':
+						areaName = name;
+						areaLevel = 'town';
+						geoJson_area = acolSearch.getGeoJsonFeaturesByKV(geoJsonData_town, 'NAME', name);
+						geoJson_areaNext = acolSearch.getGeoJsonFeaturesByKV(geoJsonData_town, 'NAME', name);
+						
+						if(geoJson_areaNext.features[0].geometry.type === 'MultiPolygon'){
+							geoJson_areaLine = turf.polygonToLine(geoJson_areaNext.features[0]);
+						}else if(geoJson_areaNext.features[0].geometry.type === 'Polygon'){
+							geoJson_areaLine = turf.featureCollection([turf.polygonToLine(geoJson_areaNext.features[0])]);
+						}
+						geoJson_areaPoints = acolSearch.getGeoJsonFeaturesByKV(geoJsonData_village, 'P_NAME', name);
+						
+						return { geoJson_areaNext: geoJson_areaLine, geoJson_areaPoints: geoJson_areaPoints, geoJson_CZ: null };
+					default:
+						//console.log('数据有误');
+						return null;
+				}
+			}
+			/**
+			 * 添加要素
+			 * @param {Object} obj
+			 */
+			function addFeaturesByObj(obj){
+				// 清空
+				vector.getSource().clear();
+				vector_CZ.getSource().clear();
+				vector_HL.getSource().clear();
+				// area_next
+				if(obj.geoJson_areaNext && obj.geoJson_areaNext.features.length){
+					let areaFeatures = new ol.format.GeoJSON().readFeatures(obj.geoJson_areaNext, { featureProjection: 'EPSG:4326' });
+					vector.getSource().addFeatures(areaFeatures);
+				}
+				// village_point
+				if(obj.geoJson_areaPoints && obj.geoJson_areaPoints.features.length){
+					let pointsFeatures = new ol.format.GeoJSON().readFeatures(obj.geoJson_areaPoints, { featureProjection: 'EPSG:4326' });
+					vector.getSource().addFeatures(pointsFeatures);
+				}
+				// CZ
+				if(obj.geoJson_CZ && obj.geoJson_CZ.features.length){
+					let czFeatures = new ol.format.GeoJSON().readFeatures(obj.geoJson_CZ, { featureProjection: 'EPSG:4326' });
+					vector_CZ.getSource().addFeatures(czFeatures);
+				}
+			}
+			/**
+			 * 根据配置信息修改图层
+			 */
+			function changeLayerByOption({obj}){
+				// 赋值
+				layerObj = obj;
+				// 村庄图层
+				(cz_obj[layerObj['村庄']]) ? vectorChanged() : vectorChanged();
+				// 示范镇
+				(layerObj['示范镇']) ? addSFZ(true) : addSFZ(false);
+				// 示范带
+				(layerObj['示范带']) ? addSFD(true) : addSFD(false);
+			}
+			/**
+			 * 示范镇
+			 * @param {Boolean} bool
+			 */
+			function addSFZ(bool){
+				vector_SFZ.getSource().clear();
+				vector_SFZ_P.getSource().clear();
+				
+				if(!bool) return;
+				
+				let sfz_arr = [];
+				let sfz_p_arr = [];
+				switch(areaLevel){
+					case 'city':
+						SFZ.forEach((e) => {
+							e.forEach((e1) => {
+								let res_json_feature = acolSearch.getGeoJsonFeaturesByKV(geoJsonData_town, 'TOWN', e1['TOWN']);
+								if(res_json_feature.features.length){
+									res_json_feature.features[0].properties['type'] = 'SFZ';
+									sfz_arr.push(res_json_feature.features[0]);
+								}
+								let res_json_feature_p = acolSearch.getGeoJsonFeaturesByKV(geoJsonData_town_p, 'TOWN', e1['TOWN']);
+								if(res_json_feature_p.features.length){
+									res_json_feature_p.features[0].properties['type'] = 'SFZ_P';
+									sfz_p_arr.push(res_json_feature_p.features[0]);
+								}
+							});
+						});
+						break;
+					case 'county':
+						SFZ.forEach((e) => {
+							e.forEach((e1) => {
+								if(e1['COUNTY'] != areaName) return;
+								let res_json_feature = acolSearch.getGeoJsonFeaturesByKV(geoJsonData_town, 'TOWN', e1['TOWN']);
+								if(res_json_feature.features.length){
+									res_json_feature.features[0].properties['type'] = 'SFZ';
+									sfz_arr.push(res_json_feature.features[0]);
+								}
+								let res_json_feature_p = acolSearch.getGeoJsonFeaturesByKV(geoJsonData_town_p, 'TOWN', e1['TOWN']);
+								if(res_json_feature_p.features.length){
+									res_json_feature_p.features[0].properties['type'] = 'SFZ_P';
+									sfz_p_arr.push(res_json_feature_p.features[0]);
+								}
+							});
+						});
+						break;
+					default:
+						break;
+				}
+				
+				if(!sfz_arr.length) return;
+				if(!sfz_p_arr.length) return;
+				// 添加要素
+				let sfzFeatures = new ol.format.GeoJSON().readFeatures(turf.featureCollection(sfz_arr), { featureProjection: 'EPSG:4326' });
+				vector_SFZ.getSource().addFeatures(sfzFeatures);
+				let sfzFeatures_p = new ol.format.GeoJSON().readFeatures(turf.featureCollection(sfz_p_arr), { featureProjection: 'EPSG:4326' });
+				vector_SFZ_P.getSource().addFeatures(sfzFeatures_p);
+			}
+			/**
+			 * 示范带
+			 * @param {Boolean} bool
+			 */
+			function addSFD(bool){
+				vector_SFD.getSource().clear();
+				vector_SFD_P.getSource().clear();
+				
+				if(!bool) return;
+				if(!(SFD[areaName] && SFD_L[areaName])) return;
+				
+				let sfd_arr = [];
+				let sfd_p_arr = [];
+				let sfd_l_feature_arr = [];
+				// 获取数据
+				let dataArr = SFD[areaName];
+				for(let i=0; i<dataArr.length; ++i){
+					dataArr[i].forEach((e) => {
+						let res_json_feature = acolSearch.getGeoJsonFeaturesByKV(geoJsonData_town, 'TOWN', e['TOWN']);
+						if(res_json_feature.features.length){
+							res_json_feature.features[0].properties['type'] = 'SFD';
+							sfd_arr.push(res_json_feature.features[0]);
+						}
+						let res_json_feature_p = acolSearch.getGeoJsonFeaturesByKV(geoJsonData_town_p, 'TOWN', e['TOWN']);
+						if(res_json_feature_p.features.length){
+							res_json_feature_p.features[0].properties['type'] = 'SFD_P';
+							sfd_p_arr.push(res_json_feature_p.features[0]);
+						}
+					});
+					let res_feature_l = new ol.format.GeoJSON().readFeatures(SFD_L[areaName][i], { featureProjection: 'EPSG:4326' });
+					if(res_feature_l.length){
+						res_feature_l[0].setStyle(function(feature){
+							let style = new ol.style.Style({
+								stroke: new ol.style.Stroke({
+									color: 'rgba(220, 20, 60, 1)',
+									width: 6,
+									lineCap:'butt',
+									lineJoin: 'miter',
+									lineDash: [8,4],
+								}),
+							});
+							let style1 = new ol.style.Style({
+								stroke: new ol.style.Stroke({
+									color: 'rgba(219, 112, 147, 1)',
+									width: 4,
+									lineCap:'butt'
+								}),
+							});
+							return [style, style1];
+						});
+						sfd_l_feature_arr.push(res_feature_l[0]);
+					}
+				}
+				
+				if(!sfd_arr.length) return;
+				if(!sfd_p_arr.length) return;
+				// 添加要素
+				let sfdFeatures = new ol.format.GeoJSON().readFeatures(turf.featureCollection(sfd_arr), { featureProjection: 'EPSG:4326' });
+				vector_SFD.getSource().addFeatures(sfdFeatures);
+				vector_SFD.getSource().addFeatures(sfd_l_feature_arr);
+				let sfdFeatures_p = new ol.format.GeoJSON().readFeatures(turf.featureCollection(sfd_p_arr), { featureProjection: 'EPSG:4326' });
+				vector_SFD_P.getSource().addFeatures(sfdFeatures_p);
+			}
+			/**
+			 * 矢量changed
+			 */
+			function vectorChanged(){
+				vector.changed();
+				vector_CZ.changed();
+			}
+			/**
+			 * 父页面消息交互 - areaInfo
+			 * @param {Object} props
+			 */
+			function sendAreaInfoMessage(props){
+				let message;
+				switch(props['type']){
+					case 'city':
+					    message = {
+					    	'key':'areaInfo',
+					    	'value': {
+					    		'areaInfo': {
+									PROVINCE: props['P_NAME'],
+					    			CITY: props['NAME'],
+									LEVEL: 'city'
+					    		},
+					    	}
+					    };
+						break;
+					case 'county':
+						message = {
+							'key':'areaInfo',
+							'value': {
+								'areaInfo': {
+									CITY: props['P_NAME'],
+									COUNTY: props['NAME'],
+									LEVEL: 'county'
+								},
+							}
+						};
+						break;
+					case 'town':
+						message = {
+							'key':'areaInfo',
+							'value': {
+								'areaInfo': {
+									COUNTY: props['P_NAME'],
+									TOWN: props['NAME'],
+									LEVEL: 'town'
+								},
+							}
+						};
+						break;
+					case 'village':
+						message = {
+							'key':'areaInfo',
+							'value': {
+								'areaInfo': {
+									TOWN: props['P_NAME'],
+									VILLAGE: props['NAME'],
+									LEVEL: 'village'
+								},
+							}
+						};
+						break;
+					default:
+						return;
+				}
+				sendMessage('gisLayerMessage', message);
+			}
+			
+		</script>
+	</body>
+</html>

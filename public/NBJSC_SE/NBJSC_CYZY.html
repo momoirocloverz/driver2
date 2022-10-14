@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<title>NBJSC_CYZY(产业资源)</title>
+		<!-- WEB -->
+		<script type="text/javascript" src="./plugin/web/jquery/jquery.min.js"></script>
+		<!-- GIS -->
+		<link href="./plugin/gis/openlayers/6.5.0/ol.css" rel="stylesheet">
+		<script type="text/javascript" src="./plugin/gis/openlayers/6.5.0/ol.js"></script>
+		<script type="text/javascript" src="./plugin/gis/turf/5.1.6/turf.min.js"></script>
+		<!-- FNC -->
+		<script type="text/javascript" src="./plugin/gis/acol/1.1.0/acol.min.js"></script>
+		<script type="text/javascript" src="./plugin/js/CYZY/message.js"></script>
+		<!-- DATA -->
+		<script type="text/javascript" src="./data/geoJson/CYZY/data.js"></script>
+		<script type="text/javascript" src="./data/geoJson/CYZY/lgq.js"></script>
+		<script type="text/javascript" src="./data/geoJson/CYZY/cyjd.js"></script>
+		<script type="text/javascript" src="./data/geoJson/CYZY/cyjd_pg.js"></script>
+		<style type="text/css">
+			.infoPop {
+				position: absolute;
+				background: url(./data/image/pop-bg1.png);
+				height: 142px;
+				width: 310px;
+				background-size: 100% 100%;
+				background-repeat: no-repeat;
+				display: flex;
+				flex-flow: column;
+				padding: 22px 0px 22px 40px;
+				justify-content: space-between;
+				z-index: 99999;
+			}
+			.infoPop p {
+				font-size: 16px;
+				margin: 0px;
+				display: flex;
+			}
+			.infoPop p span:nth-of-type(1){
+				flex: 0.5;
+				color: #6CD0FF;
+				cursor: default;
+				padding-left: 10px;
+			}
+			.infoPop p span:nth-of-type(2){
+				flex: 1;
+				color: #FFFFFF;
+				cursor: default;
+				padding-right: 15px;
+			}			
+		</style>
+	</head>
+	<body style=" margin: 0;overflow: hidden;background-color: transparent;width: 100%;height:100%;position: absolute;top: 0;">
+		<div class="infoPop" id="infoWindow"></div>
+		<div id="map" style="margin: 0 auto;width: 100%;height: 100%; background-color: transparent;border: rgba(255,255,255,0);"></div>
+		<script type="text/javascript">
+			// 数据解密
+			const geoJsonData_town = new acol_dea().decodeGeoJson({ data: geoJsonData_town1 });
+			const geoJsonData_county = new acol_dea().decodeGeoJson({ data: geoJsonData_county1 });
+			const geoJsonData_city = new acol_dea().decodeGeoJson({ data: geoJsonData_city1 });
+			
+			// 地图map对象
+			let acMap, overLayer;
+			let wmsLayer_HL, wmsLayer, wmsLayer_gbznt, wmsLayer_qltt, wmsLayer_yh, wmsLayer_flh, wmsLayer_gbnnlgq, wmsLayer_gbnwlgq, wmsLayer_ls, wmsLayer_smt, wmsLayer_gd, wmsLayer_yjjbnt;
+			let wmsLayer_gdnyn, wmsLayer_gdwyn, wmsLayer_gdngbn, wmsLayer_gdwgbn, wmsLayer_ynngbn, wmsLayer_ynwgbn, wmsLayer_gdhynngbn, wmsLayer_gdhynwgbn;
+			let wmsLayer_humm_2020, wmsLayer_humm_last;
+			let vector, vector_HL, vector_SXT, vector_PG, vector_ZZ;
+			let vector_P_SHUI, vector_P_XM, vector_P_SHU, vector_P_CCY, vector_P_JGLTQY, vector_P_NJL, vector_P_HZS, vector_P_JTNC, vector_P_NYQY, vector_P_DH, vector_P_QT;
+			// 全局变量
+			let acolLayer, acolUtil, acolSearch, acolMeasure;
+			let tdtType = 'img';
+			let areaName = '';
+			let areaLevel = '';
+			let area_filter = '';
+			// 矢量要素
+			let geoJson_area = null;
+			let geoJson_areaNext = null;
+			let geoJson_areaPoints = null;
+			let geoJson_areaLine = null;
+			// 其他
+			let lastFeature;
+			let currentAreaInfo;
+			let zoom, lastRange = 0;
+			let isMeasureDrawing = false;
+			// 竹子
+			let ZZObj = {
+				'毛竹': {
+					'0-10000': '#B6DCA2',
+					'10000-20000': '#8FC273',
+					'20000-30000': '#78C5A0',
+					'30000-40000': '#72CD41',
+					'40000-50000': '#BBD622',
+					'50000-60000': '#CEB220',
+					'60000-70000': '#D8911E'
+				},
+				'杂竹': {
+					'0-5000': '#E6A3FF',
+					'5000-10000': '#BA8DCB',
+					'10000-15000': '#C577E5',
+					'15000-20000': '#9C88EF',
+					'20000-25000': '#8062FB',
+					'25000-30000': '#5A45B2'
+				},
+			};
+			// 业务数据
+			let sxtObj = {
+				'铁塔': 'TT',
+				'基地': 'JD'
+			};
+			let ghymbObj = {
+				'水稻发展规划': { name: 'SDFZGH', color: '#63CC2B' },
+				'小麦发展规划': { name: 'XMFZGH', color: '#A7BF1F' },
+				'宁海岔路黑猪': { name: 'NBCLHZ', color: '#BA8DCB' },
+				'宁海县土鸡': { name: 'NHXTJ', color: '#C577E5' },
+				'象山白鹅': { name: 'XSBE', color: '#B542E5' },
+				'慈溪蜜蜂': { name: 'CXMF', color: '#9C88EF' },
+				'余姚蜜蜂': { name: 'YYMF', color: '#8062FB' },
+				'余姚番鸭': { name: 'YYFY', color: '#5A45B2' },
+				'江北奶牛': { name: 'JBNN', color: '#A67996' },
+				'镇海鹌鹑': { name: 'ZHAC', color: '#CE5FA4' },
+				'余姚家禽': { name: 'YYJQ', color: '#BF3B8D' },
+				'沿岸海洋渔业产业片区': { name: 'YAHYYYCYPQ', color: '#9FAA45' },
+				'淡水渔业产业片区': { name: 'DSYYCYPQ', color: '#73BA74' },
+				'海淡水虾类': { name: 'HDSXL', color: '#FFAC1D' },
+				'海水贝藻类': { name: 'HSBZL', color: '#CC8A1F' },
+				'海水蟹类': { name: 'HSXL', color: '#FD7E3F' },
+				'生态鳖': { name: 'STX', color: '#DBBB0D' },
+				'岱衢族大黄鱼': { name: 'YDDHY', color: '#B29A20' },
+				'蔬菜总布局': { name: 'SHCZBJ', color: '#C85C9D' },
+				'加工出口蔬菜（榨菜、花椰菜）': { name: 'ZCHYC', color: '#AD6A63' },
+				'加工出口蔬菜（雪菜）': { name: 'XC', color: '#FD7D7D' },
+				'鲜食大豆（蚕豌豆）': { name: 'CWD', color: '#FF5C5C' },
+				'马铃薯': { name: 'MLS', color: '#FC4646' },
+				'山地特色蔬菜（芋艿）': { name: 'YN', color: '#CC3333' },
+				'水生蔬菜（茭白）': { name: 'JB', color: '#C46796' },
+				'西甜瓜': { name: 'XTG', color: '#FD76BA' },
+				'食用菌': { name: 'SYJ', color: '#FC33A9' },
+				'草莓': { name: 'CM', color: '#CC1176' },
+				'油菜籽重点乡镇': { name: 'YCZZDXZ', color: '#44A0CC' },
+				'油茶重点乡镇': { name: 'YCZDXZ', color: '#1070F4' },
+			};
+			
+			// 临时处理逻辑
+			let ghymbNameArr = [];
+			Object.values(ghymbObj).forEach((e) => {
+				ghymbNameArr.push(e.name);
+			});
+			
+			let cyjdmObj = {
+				'粮食': 'LS',
+				'水蜜桃': 'SMT',
+			};
+			let cyjddObj = {
+				'蔬菜': 'SHU',
+				'畜牧': 'XM',
+				'水产': 'SHUI',
+				'茶叶': 'CCY',
+				'农产品加工': 'JGLTQY',
+				'农家乐': 'NJL',
+				'合作社': 'HZS',
+				'家庭农场': 'JTNC',
+				'农业企业': 'NYQY',
+				'大户': 'DH',
+				'其他': 'QT',
+			};
+			let cy_keys = Object.keys(cyjddObj);
+			let cy_values = Object.values(cyjddObj);
+			let CS = {
+				// 畜牧
+				'XM': { color: '#E6A3FF',text: '牧' },
+				// 蔬菜
+				'SHU': { color: '#FFA8A8',text: '菜' },
+				// 水产
+				'SHUI': { color: '#FEC561',text: '渔' },
+				// 茶叶
+				'CCY': { color: '#9EFD6B',text: '茶' },
+				// 农产品加工
+				'JGLTQY': { color: '#00BFFF',text: '农' },
+				// 农家乐
+				'NJL': { color: '#FFFF00',text: '乐' },
+				// 合作社
+				'HZS': { color: '#FF984C',text: '社' },
+				// 家庭农场
+				'JTNC': { color: '#22DAD7',text: '场' },
+				// 农业企业
+				'NYQY': { color: '#3C81FF',text: '企' },
+				// 大户
+				'DH': { color: '#C773FF',text: '户' },
+				// 其他
+				'QT': { color: '#69EF68',text: '它' },
+			};
+			let vectorStyle = {};
+			for(let key in CS){
+				let colorRGB = new acol_util().hexToRGB(CS[key].color);
+				let text = CS[key].text;
+				vectorStyle[key] = {
+					'1': new ol.style.Style({
+						image: new ol.style.Circle({
+							radius: 6,
+							fill: new ol.style.Fill({ 'color': 'rgba('+colorRGB['R']+', '+colorRGB['G']+', '+colorRGB['B']+', 0.8)' }),
+							stroke: new ol.style.Stroke({ 'color': 'rgba(255, 255, 255, 1)', 'width': 2 })
+						})
+					}),
+					'2': new ol.style.Style({
+						image: new ol.style.Circle({
+							radius: 10,
+							fill: new ol.style.Fill({ 'color': 'rgba('+colorRGB['R']+', '+colorRGB['G']+', '+colorRGB['B']+', 0.8)' }),
+							stroke: new ol.style.Stroke({ 'color': 'rgba(255, 255, 255, 1)','width': 2 })
+						})
+					}),
+					'3': new ol.style.Style({
+						image: new ol.style.Circle({
+							radius: 14,
+							fill: new ol.style.Fill({ 'color': 'rgba('+colorRGB['R']+', '+colorRGB['G']+', '+colorRGB['B']+', 0.6)' }), 
+							stroke: new ol.style.Stroke({ 'color': 'rgba(255, 255, 255, 1)', 'width': 2 })
+						}),
+						text: new ol.style.Text({
+							text: text,
+							font: '18px Calibri',
+							overflow: false,
+							fill: new ol.style.Fill({ 'color': 'rgba(255, 255, 255, 1)' }),
+							stroke: new ol.style.Stroke({ 'color': 'rgba(0, 0, 0, 1)', 'width': 1 }),
+							offsetX: 0,
+							offsetY: 0
+						})
+					}),
+				};
+			}
+			let layerObj = {
+				/* '三调地类': {
+					'耕地': ['水田', '旱地'],
+					'种植园用地': ['果园', '茶园', '其他园地'],
+					'林地': ['乔木林地', '竹林地', '灌木林地', '其他林地'],
+					'其他农业用地': ['其他土地', '可调整乔木林地', '可调整其他园地', '可调整其他林地', '可调整养殖坑塘', '可调整果园', '可调整茶园', '坑塘水面', '水库水面', '沟渠', '设施农用地', '养殖坑塘'],
+					'农村道路': ['农村道路'],
+					'河流水面': ['河流水面'],
+					'公路用地': ['公路用地'],
+					'农村宅基地': ['农村宅基地'],
+					'工业用地': ['工业用地'],
+					'其他非农用地': ['交通服务场站用地', '公园与绿地', '公用设施用地', '其他草地', '内陆滩涂', '商业服务业设施用地', '城镇住宅用地', '城镇村道路用地', '广场用地',
+						'机关团体新闻出版用地', '水工建筑用地', '沿海滩涂', '物流仓储用地', '特殊用地', '科教文卫用地', '管道运输用地', '轨道交通用地', '采矿用地', '铁路用地'
+					]
+				}, */
+				'三调地类': {
+					'耕地': [],
+					'种植园用地': [],
+					'林地': [],
+					'其他农业用地': [],
+					'农村道路': [],
+					'河流水面': [],
+					'公路用地': [],
+					'农村宅基地': [],
+					'工业用地': [],
+					'其他非农用地': []
+				},
+				'耕地': '',
+				'永久基本农田': '',
+				'非粮化图斑': '',
+				'清理腾退': '',
+				'优化补入': '',
+				'高标准农田': '',
+				'高标农外粮功区': '',
+				'高标农内粮功区': '',
+				'耕地内永农': '',
+				'耕地外永农': '',
+				'耕地内高标农': '',
+				'耕地外高标农': '',
+				'永农内高标农': '',
+				'永农外高标农': '',
+				'耕地和永农内高标农': '',
+				// 2020
+				'花卉苗木':'',
+				// 毛竹、杂竹
+				'竹子':'',
+				// ['蔬菜','畜牧','水产','茶叶','农产品加工','农家乐','合作社','家庭农场','农业企业','大户','其他']
+				'产业基地点': [],
+				// ['粮食','水蜜桃']
+				'产业基地面': [],
+				// ['水稻发展规划','沿岸海洋渔业产业片区', ......]
+				'产业基地规划面': [],
+				// ['铁塔','基地']
+				'物联网设备': [],
+			};
+			// 图层update状态
+			let layerUpdate = false;
+			
+			init();
+			
+			/**
+			 * 初始化方法
+			 */
+			function init(){
+				// acMap对象
+				acMap = new acol_map();
+				acMap.initMap({ id: 'map',center: [121.575210988279, 29.6373630365816], zoom: 10, minZoom: 9, maxZoom: 18, constrainResolution: true });
+				// acol_layer
+				acolLayer = new acol_layer(acMap.map);
+				acolUtil = new acol_util();
+				acolSearch = new acol_search();
+				// 量测初始化
+				acolMeasure = new acol_measure(acMap.map);
+				acolMeasure.measureInit({ color: '#FFAC1D' });
+				
+				// 添加矢量面数据图层
+				addVectorLayer();
+				// 添加wms图层
+				addWMSLayer();
+				// 添加气泡叠加层
+				addPopupByElement(document.getElementById('infoWindow'));
+
+				// 注册要素选择事件
+				acMap.mapEventOn(function(e){
+					this.getFeatures().clear();	
+					if(!e.selected.length) return;
+					if(isMeasureDrawing) return;
+					
+					// 获取参数
+					let props = e.selected[0].getProperties();
+					if(props['TYPE'] === 'HLLayer'){
+						changeAreaByName(props['NAME']);
+					}else if(props['TYPE'] === 'SXT'){
+						let message = {
+							'key': 'pointInfo',
+							'value': {
+								'pointInfo': new acol_util().FPconversion(props)
+							}
+						};
+						sendMessage('gisLayerMessage', message);
+					}else if(cy_values.indexOf(props['TYPE']) != -1){
+						let message = {
+							'key': 'pointInfo',
+							'value': {
+								'pointInfo': new acol_util().FPconversion(props)
+							}
+						};
+						sendMessage('gisLayerMessage', message);
+					}
+				}, 'SELECT');
+				// 注册鼠标单击事件
+				acMap.mapEventOn(clickCallBack, 'LEFT_CLICK');
+				acMap.mapEventOn(dbclickCallBack, 'LEFT_DOUBLE_CLICK');
+				// 注册鼠标滚轮事件
+				acMap.mapEventOn(function(e){
+					if(layerUpdate){
+						wmsLayer.getSource().refresh();
+						layerUpdate = false;
+					}
+					// 地图比例尺等级监听
+					zoom = e.map.getView().getZoom();
+					//console.log('-------- zoom -------',zoom);
+					
+					if(zoom <= 11){
+						if(lastRange === 1) return;
+						lastRange = 1;	
+						// 条件
+						switch(areaLevel){
+							case 'city':
+								let res_feature = (getFeaturesByName(areaName));
+								if(res_feature) addFeaturesByObj(res_feature);
+								clear();
+								break;
+							default:
+								break;	
+						}
+						lastFeature = null;
+						acMap.showLayer(vector_HL);
+						// 设置样式
+						setPointLayerStyle();
+					}else if(zoom <= 13){
+						if(lastRange === 2) return;
+						lastRange = 2;
+						// 条件
+						switch(areaLevel){
+							case 'city':
+								addFeaturesByObj({
+									geoJson_areaNext: geoJsonData_town,
+									geoJson_areaPoints: null
+								});
+								clear();
+								break;
+							case 'county':
+								addFeaturesByObj({
+									geoJson_areaNext: acolSearch.getGeoJsonFeaturesByKV(geoJsonData_town, 'P_NAME', areaName),
+									geoJson_areaPoints: null
+								});
+								clear();
+								break;
+							default:
+								break;	
+						}
+						lastFeature = null;
+						acMap.showLayer(vector_HL);
+						// 设置样式
+						setPointLayerStyle();
+					}else{
+						if(lastRange === 3) return;
+						lastRange = 3;
+						// 条件
+						switch(areaLevel){
+							case 'city':
+								addFeaturesByObj({
+									geoJson_areaNext: null,
+									geoJson_areaPoints: geoJsonData_lgqPoints
+								});
+								break;
+							case 'county':
+								addFeaturesByObj({
+									geoJson_areaNext: null,
+									geoJson_areaPoints: acolSearch.getGeoJsonFeaturesByKV(geoJsonData_lgqPoints, 'COUNTY', areaName)
+								});
+								break;
+							default:
+								break;	
+						}
+						lastFeature = null;
+						acMap.hideLayer(vector_HL);
+						// 设置样式
+						setPointLayerStyle();
+					}
+				}, 'MOUSE_WHEEL');
+				
+				// 注册鼠标拖拽事件
+				acMap.mapEventOn(function(e){
+					if(layerUpdate){
+						wmsLayer.getSource().refresh();
+						layerUpdate = false;
+					}
+				}, 'MOUSE_DRAG');
+				
+				// 添加鼠标移动事件
+				acMap.mapEventOn(function(e){
+					// 屏幕坐标点获取要素
+					let features = acMap.map.getFeaturesAtPixel(e.pixel);
+					if(features.length){
+						if(isMeasureDrawing) return;
+						
+						// 临时处理逻辑
+						if(ghymbNameArr.indexOf(features[0].getProperties()['TYPE']) != -1){
+							acMap.map.getTargetElement().style.cursor = 'auto';
+							return;
+						} 
+						// SXT
+						if((cy_values.concat(['SXT'])).indexOf(features[0].getProperties()['TYPE']) != -1){
+							acMap.map.getTargetElement().style.cursor = 'pointer';
+							return;
+						}
+						if((lastFeature != features[0])){
+							if(['city', 'county'].indexOf(areaLevel) === -1){
+								acMap.map.getTargetElement().style.cursor = 'auto';
+								return;
+							}
+							lastFeature = features[0].clone();
+							lastFeature.setProperties({ 'TYPE': 'HLLayer' });
+							// 添加要素前先清空图层
+							vector_HL.getSource().clear();
+							vector_HL.getSource().addFeatures([lastFeature]);
+							// 获取参数
+							// let props = lastFeature.getProperties();
+							// console.log(props);
+							if(lastRange === 3){
+								acMap.map.getTargetElement().style.cursor = 'auto';
+							}else{
+								acMap.map.getTargetElement().style.cursor = 'pointer';
+							}
+						}
+					}else{
+						vector_HL.getSource().clear();
+						lastFeature = null;
+						acMap.map.getTargetElement().style.cursor = 'auto';
+					}
+				}, 'MOUSE_MOVE');
+				
+				// initInfo消息交互
+				let message = { 'key': 'initInfo', 'value': { 'initType': true } };
+				sendMessage('gisMapMessage',message);
+			}
+			/**
+			 * 双击事件回调函数
+			 * @param {Object} e
+			 */
+			async function dbclickCallBack(e){
+				if(isMeasureDrawing) return;
+				
+				// 区划矢量高亮时不允许点击
+				if(acMap.map.getFeaturesAtPixel(e.pixel).length){
+					if((acMap.map.getFeaturesAtPixel(e.pixel)[0].get('TYPE') === 'HLLayer') || (acMap.map.getFeaturesAtPixel(e.pixel)[0].get('TYPE') === 'SXT')) return;
+					if(cy_values.indexOf(acMap.map.getFeaturesAtPixel(e.pixel)[0].get('TYPE')) != -1) return;
+				}
+				if(areaLevel === 'lgq') return;
+				// 视图
+				let view = acMap.map.getView();
+				let viewResolution = view.getResolution();
+				// layer/source
+				let temp_layer = acolLayer.getLayerByName('土地非农化');
+				let temp_source = temp_layer.getSource();
+				// url
+				let url = temp_source.getFeatureInfoUrl(e.coordinate, viewResolution, view.getProjection(),{ 'INFO_FORMAT': 'application/json', 'FEATURE_COUNT': 5 });
+				if(url){
+					let data = await fetch(url).then(function(res){
+						return res.text();
+					});
+					// 特殊逻辑限制
+					let point = turf.point(e.coordinate);
+					if(turf.booleanPointInPolygon(point,geoJson_area.features[0])){
+						// 高亮弹窗
+						if(JSON.parse(data).features.length){
+							//console.log(JSON.parse(data).features[0].properties);
+							changeAreaByName(JSON.parse(data).features[0].properties['GHMC']);
+							//console.log(JSON.parse(data).features[0].properties['GHMC']);
+						}else{
+							clear();
+						}
+					}else{
+						clear();
+					}
+				}
+			}
+			/**
+			 * 单击事件回调函数
+			 * @param {Object} e
+			 */
+			async function clickCallBack(e){
+				if(isMeasureDrawing) return;
+				
+				//console.log(acMap.map.getFeaturesAtPixel(e.pixel))
+				// 区划矢量高亮时不允许点击
+				if(acMap.map.getFeaturesAtPixel(e.pixel).length){
+					if((acMap.map.getFeaturesAtPixel(e.pixel)[0].get('TYPE') === 'HLLayer') || (acMap.map.getFeaturesAtPixel(e.pixel)[0].get('TYPE') === 'SXT')) return;
+					if(cy_values.indexOf(acMap.map.getFeaturesAtPixel(e.pixel)[0].get('TYPE')) != -1) return;
+				}
+				// 视图
+				let view = acMap.map.getView();
+				let viewResolution = view.getResolution();
+				// layer/source
+				let temp_layer = acolLayer.getLayerByName('土地非农化');
+				let temp_source = temp_layer.getSource();
+				// url
+				let url = temp_source.getFeatureInfoUrl(e.coordinate, viewResolution, view.getProjection(),{ 'INFO_FORMAT': 'application/json', 'FEATURE_COUNT': 5 });
+				if(url){
+					let data = await fetch(url).then(function(res){
+						return res.text();
+					});
+					// 特殊逻辑限制
+					let point = turf.point(e.coordinate);
+					if(turf.booleanPointInPolygon(point,geoJson_area.features[0])){
+						// 高亮弹窗
+						if(JSON.parse(data).features.length){
+							addHLFeature(JSON.parse(data).features[0]);
+							openPopupByInfo(JSON.parse(data).features[0].properties, e.coordinate);
+						}else{
+							clear();
+						}
+					}else{
+						clear();
+					}
+				}
+			}
+			/**
+			 * 选择量测类型
+			 * @param {String} type
+			 */
+			function measureByType(type){
+				//console.log('--- measureByType ---', type);
+				
+				isMeasureDrawing = true;
+				acolMeasure.addInteractionByType(type, ({ measureType, measureResult }) => {
+					// 距离量测单位：米(m)，面积量测单位：平方米(㎡)
+					let message = { 'key': 'measureByType', 'value': { 'measureType': measureType, 'measureResult': measureResult } };
+					sendMessage('gisMapMessage',message);
+				});
+			}
+			/**
+			 * 关闭量测功能
+			 */
+			function closeMeasure(){
+				acolMeasure.closeInteraction();
+				
+				isMeasureDrawing = false;
+			}
+			/**
+			 * 清除量测结果
+			 */
+			function clearMeasure(){
+				acolMeasure.clearDrawFeatures();
+			}
+			/**
+			 * 根据类型修改天地图服务
+			 * @param {String} type
+			 */
+			function changeTDTLayerByType(type){
+				tdtMaskByFeature(type);
+			}
+			/**
+			 * 返回上级区划
+			 */
+			function lastArea(){
+				if(currentAreaInfo['type'] != 'city'){
+					changeAreaByName(currentAreaInfo['P_NAME']);
+				}else{
+					changeAreaByName(currentAreaInfo['NAME']);
+				}
+			}
+			/**
+			 * 设施图层样式
+			 */
+			function setPointLayerStyle(){
+				//console.log('--- setPointLayerStyle ---');
+				
+				let arr = cy_keys;
+				zoom = acMap.map.getView().getZoom();
+				if(zoom <= 11){
+					arr.forEach((e) => {
+						eval('vector_P_'+cyjddObj[e]).setStyle(vectorStyle[cyjddObj[e]]['1']);
+					});
+				}else if((zoom >= 12) && (zoom < 14)){
+					arr.forEach((e) => {
+						eval('vector_P_'+cyjddObj[e]).setStyle(vectorStyle[cyjddObj[e]]['2']);
+					});
+				}else{
+					arr.forEach((e) => {
+						eval('vector_P_'+cyjddObj[e]).setStyle(vectorStyle[cyjddObj[e]]['3']);
+					});
+				}
+			}
+			/**
+			 * 根据行政区划添加摄像头
+			 */
+			function addSXT(){
+				vector_SXT.getSource().clear();
+				
+				// 临时加入摄像头
+				let array_SXT = [
+					{ 'NAME': '奉化九岙水蜜桃基地', 'TYPE': 'SXT', 'LNG': 121.371560, 'LAT': 29.672780, 'COUNTY': '奉化区', 'TOWN': '锦屏街道', 'dataType': 'JD' },
+					{ 'NAME': '象山蓝尚南美对虾养殖基地', 'TYPE': 'SXT', 'LNG': 121.800900, 'LAT': 29.475130, 'COUNTY': '象山县', 'TOWN': '墙头镇', 'dataType': 'JD' },
+					{ 'NAME': '慈溪玉兰果蔬育苗基地', 'TYPE': 'SXT', 'LNG': 121.262950, 'LAT': 30.252630, 'COUNTY': '慈溪市', 'TOWN': '坎墩街道', 'dataType': 'JD' },
+					{ 'NAME': '慈溪嘉沃育苗基地', 'TYPE': 'SXT', 'LNG': 121.182590, 'LAT': 30.218750, 'COUNTY': '慈溪市', 'TOWN': '周巷镇', 'dataType': 'JD' },
+					{ 'NAME': '镇海九龙湖育苗基地', 'TYPE': 'SXT', 'LNG': 121.548440, 'LAT': 29.994640, 'COUNTY': '镇海区', 'TOWN': '九龙湖镇', 'dataType': 'JD' },
+					{ 'NAME': '祥平牧场', 'TYPE': 'SXT', 'LNG': 121.61192, 'LAT': 30.02685, 'COUNTY': '镇海区', 'TOWN': '澥浦街道', 'dataType': 'JD' },
+					// 铁塔数据
+					{ 'NAME': '余姚区马渚镇粮功区监控点001', 'TYPE': 'SXT', 'LNG': 121.067711, 'LAT': 30.088151, 'COUNTY': '余姚市', 'TOWN': '马渚镇', 'dataType': 'TT'},
+					// 点位信息
+					{ 'NAME': '江北宝国寺', 'TYPE': 'SXT', 'LNG': 121.516249885428, 'LAT': 29.9812882239324, 'COUNTY': '江北区', 'TOWN': '洪塘街道', 'dataType': 'TT' },
+					//{ 'NAME': '江北洪陈', 'TYPE': 'SXT', 'LNG': 121.41666714026212, 'LAT': 29.963556307725455, 'COUNTY': '江北区', 'TOWN': '慈城镇', 'dataType': 'TT' },
+					{ 'NAME': '黄家埠镇杏山村', 'TYPE': 'SXT', 'LNG': 120.98852346891685, 'LAT': 30.103998235508158, 'COUNTY': '余姚市', 'TOWN': '黄家埠镇', 'dataType': 'TT' },
+					{ 'NAME': '马渚镇云楼村', 'TYPE': 'SXT', 'LNG': 121.05397741496816, 'LAT': 30.051344476360587, 'COUNTY': '余姚市', 'TOWN': '马渚镇', 'dataType': 'TT' },
+					{ 'NAME': '河姆渡遗址', 'TYPE': 'SXT', 'LNG': 121.34981293222822, 'LAT': 29.96970230009073, 'COUNTY': '余姚市', 'TOWN': '河姆渡镇', 'dataType': 'TT' },
+					// 20220714
+					{ 'NAME': '余姚垫桥', 'TYPE': 'SXT', 'LNG': 121.156712, 'LAT': 30.159619, 'COUNTY': '余姚市', 'TOWN': '低塘街道', 'dataType': 'TT' },
+					{ 'NAME': '宁波市余姚市YY新建19基站', 'TYPE': 'SXT', 'LNG': 121.171541, 'LAT': 30.098711, 'COUNTY': '余姚市', 'TOWN': '凤山街道', 'dataType': 'TT' },
+					{ 'NAME': '宁波市余姚市YY太平渡', 'TYPE': 'SXT', 'LNG': 121.305215, 'LAT': 29.982323, 'COUNTY': '余姚市', 'TOWN': '河姆渡镇', 'dataType': 'TT' },
+					{ 'NAME': '宁波余姚河姆渡遗址', 'TYPE': 'SXT', 'LNG': 121.338901, 'LAT': 29.965916, 'COUNTY': '余姚市', 'TOWN': '河姆渡镇', 'dataType': 'TT' },
+					{ 'NAME': '宁波余姚河姆渡大桥', 'TYPE': 'SXT', 'LNG': 121.286955, 'LAT': 30.003955, 'COUNTY': '余姚市', 'TOWN': '河姆渡镇', 'dataType': 'TT' },
+					{ 'NAME': '宁波余姚黄家埠江沿', 'TYPE': 'SXT', 'LNG': 120.977866, 'LAT': 30.100373, 'COUNTY': '余姚市', 'TOWN': '黄家埠镇', 'dataType': 'TT' },
+					{ 'NAME': '余清福庵', 'TYPE': 'SXT', 'LNG': 121.094611, 'LAT': 30.043733, 'COUNTY': '余姚市', 'TOWN': '兰江街道', 'dataType': 'TT' },
+					{ 'NAME': '宁波余姚肖东史家桥', 'TYPE': 'SXT', 'LNG': 121.071211, 'LAT': 30.035792, 'COUNTY': '余姚市', 'TOWN': '兰江街道', 'dataType': 'TT' },
+					{ 'NAME': '宁波余姚肖东南基站', 'TYPE': 'SXT', 'LNG': 121.107211, 'LAT': 30.009311, 'COUNTY': '余姚市', 'TOWN': '兰江街道', 'dataType': 'TT' },
+					{ 'NAME': '宁波余姚西凤桥基站', 'TYPE': 'SXT', 'LNG': 121.134572, 'LAT': 30.024141, 'COUNTY': '余姚市', 'TOWN': '兰江街道', 'dataType': 'TT' },
+					{ 'NAME': '宁波余姚乐城村', 'TYPE': 'SXT', 'LNG': 121.081299, 'LAT': 30.129602, 'COUNTY': '余姚市', 'TOWN': '朗霞街道', 'dataType': 'TT' },
+					{ 'NAME': '宁波市余姚市YY胡孙巷', 'TYPE': 'SXT', 'LNG': 121.081214, 'LAT': 30.155756, 'COUNTY': '余姚市', 'TOWN': '朗霞街道', 'dataType': 'TT' },
+					{ 'NAME': '宁波余姚白山头村搬迁', 'TYPE': 'SXT', 'LNG': 121.172216, 'LAT': 30.037152, 'COUNTY': '余姚市', 'TOWN': '梨洲街道', 'dataType': 'TT' },
+					{ 'NAME': '余姚姚家垫', 'TYPE': 'SXT', 'LNG': 121.189211, 'LAT': 30.005011, 'COUNTY': '余姚市', 'TOWN': '梨洲街道', 'dataType': 'TT' },
+					{ 'NAME': '宁波市余姚市YY咸池', 'TYPE': 'SXT', 'LNG': 121.201247, 'LAT': 30.030699, 'COUNTY': '余姚市', 'TOWN': '凤山街道', 'dataType': 'TT' },
+					{ 'NAME': '宁波市余姚市YY白鹤桥', 'TYPE': 'SXT', 'LNG': 121.217462, 'LAT': 30.001076, 'COUNTY': '余姚市', 'TOWN': '陆埠镇', 'dataType': 'TT' },
+					{ 'NAME': '宁波余姚临山凤栖路', 'TYPE': 'SXT', 'LNG': 120.971537, 'LAT': 30.148038, 'COUNTY': '余姚市', 'TOWN': '临山镇', 'dataType': 'TT' },
+					{ 'NAME': '宁波市余姚市YY小岭头', 'TYPE': 'SXT', 'LNG': 121.005648, 'LAT': 30.137063, 'COUNTY': '余姚市', 'TOWN': '临山镇', 'dataType': 'TT' },
+					{ 'NAME': '宁波市余姚市YY临浦东基站', 'TYPE': 'SXT', 'LNG': 120.991841, 'LAT': 30.179382, 'COUNTY': '余姚市', 'TOWN': '泗门镇', 'dataType': 'TT' },
+					{ 'NAME': '宁波余姚陆埠高速', 'TYPE': 'SXT', 'LNG': 121.244371, 'LAT': 29.988854, 'COUNTY': '余姚市', 'TOWN': '陆埠镇', 'dataType': 'TT' },
+					{ 'NAME': '宁波余姚高速王家', 'TYPE': 'SXT', 'LNG': 121.276931, 'LAT': 29.985646, 'COUNTY': '余姚市', 'TOWN': '陆埠镇', 'dataType': 'TT' },
+					{ 'NAME': '余马渚南魏', 'TYPE': 'SXT', 'LNG': 121.067711, 'LAT': 30.088151, 'COUNTY': '余姚市', 'TOWN': '马渚镇', 'dataType': 'TT' },
+					{ 'NAME': '宁波余姚马渚高阶沿', 'TYPE': 'SXT', 'LNG': 121.072625, 'LAT': 30.056487, 'COUNTY': '余姚市', 'TOWN': '马渚镇', 'dataType': 'TT' },
+					{ 'NAME': '宁波余姚开元村北', 'TYPE': 'SXT', 'LNG': 121.063833, 'LAT': 30.111651, 'COUNTY': '余姚市', 'TOWN': '马渚镇', 'dataType': 'TT' },
+					{ 'NAME': '余姚马诸诸北', 'TYPE': 'SXT', 'LNG': 121.032151, 'LAT': 30.080251, 'COUNTY': '余姚市', 'TOWN': '马渚镇', 'dataType': 'TT' },
+					{ 'NAME': '余姚高速云楼', 'TYPE': 'SXT', 'LNG': 121.043021, 'LAT': 30.047721, 'COUNTY': '余姚市', 'TOWN': '马渚镇', 'dataType': 'TT' },
+					{ 'NAME': '余姚牟山长坝村', 'TYPE': 'SXT', 'LNG': 121.001665, 'LAT': 30.058209, 'COUNTY': '余姚市', 'TOWN': '牟山镇', 'dataType': 'TT' },
+					{ 'NAME': '宁波余姚圣汐澜山二期', 'TYPE': 'SXT', 'LNG': 121.346683, 'LAT': 30.025468, 'COUNTY': '余姚市', 'TOWN': '三七市镇', 'dataType': 'TT' },
+					{ 'NAME': '宁波市余姚市YY祝家渡', 'TYPE': 'SXT', 'LNG': 121.323139, 'LAT': 30.001968, 'COUNTY': '余姚市', 'TOWN': '三七市镇', 'dataType': 'TT' },
+					{ 'NAME': '宁波余姚水阁西', 'TYPE': 'SXT', 'LNG': 121.063798, 'LAT': 30.172301, 'COUNTY': '余姚市', 'TOWN': '泗门镇', 'dataType': 'TT' },
+					{ 'NAME': '宁波余姚泗门陶家路村', 'TYPE': 'SXT', 'LNG': 121.030984, 'LAT': 30.191009, 'COUNTY': '余姚市', 'TOWN': '泗门镇', 'dataType': 'TT' },
+					{ 'NAME': '余姚泗门镇南', 'TYPE': 'SXT', 'LNG': 121.043881, 'LAT': 30.149511, 'COUNTY': '余姚市', 'TOWN': '泗门镇', 'dataType': 'TT' },
+					{ 'NAME': '宁波余姚感孝桥', 'TYPE': 'SXT', 'LNG': 121.063814, 'LAT': 30.233783, 'COUNTY': '余姚市', 'TOWN': '小曹娥镇', 'dataType': 'TT' },
+					{ 'NAME': '余小曹娥（周长权）', 'TYPE': 'SXT', 'LNG': 121.065675, 'LAT': 30.200457, 'COUNTY': '余姚市', 'TOWN': '小曹娥镇', 'dataType': 'TT' },
+					{ 'NAME': '宁波市余姚市YY汽车西站', 'TYPE': 'SXT', 'LNG': 121.121471, 'LAT': 30.045491, 'COUNTY': '余姚市', 'TOWN': '阳明街道', 'dataType': 'TT' },
+					{ 'NAME': '杭甬客专GTW余姚河里村东', 'TYPE': 'SXT', 'LNG': 121.112505, 'LAT': 30.101097, 'COUNTY': '余姚市', 'TOWN': '阳明街道', 'dataType': 'TT' },
+					{ 'NAME': '余姚国华电厂南', 'TYPE': 'SXT', 'LNG': 121.106495, 'LAT': 30.060114, 'COUNTY': '余姚市', 'TOWN': '阳明街道', 'dataType': 'TT' },
+					{ 'NAME': '宁波余姚康山村北', 'TYPE': 'SXT', 'LNG': 121.130618, 'LAT': 30.072327, 'COUNTY': '余姚市', 'TOWN': '阳明街道', 'dataType': 'TT' },
+					{ 'NAME': '余姚钱家埠', 'TYPE': 'SXT', 'LNG': 121.251747, 'LAT': 30.029747, 'COUNTY': '余姚市', 'TOWN': '丈亭镇', 'dataType': 'TT' },
+					{ 'NAME': '丈亭凤东', 'TYPE': 'SXT', 'LNG': 121.304181, 'LAT': 30.026381, 'COUNTY': '余姚市', 'TOWN': '丈亭镇', 'dataType': 'TT' },
+					{ 'NAME': '宁波市慈溪市CX附逍中', 'TYPE': 'SXT', 'LNG': 121.346131, 'LAT': 30.202781, 'COUNTY': '慈溪市', 'TOWN': '桥头镇', 'dataType': 'TT' },
+					{ 'NAME': '宁波市慈溪市CX新浦陈家舍', 'TYPE': 'SXT', 'LNG': 121.375801, 'LAT': 30.252531, 'COUNTY': '慈溪市', 'TOWN': '新浦镇', 'dataType': 'TT' },
+					{ 'NAME': '宁波市慈溪市CX鲤池头', 'TYPE': 'SXT', 'LNG': 121.430039, 'LAT': 30.108166, 'COUNTY': '慈溪市', 'TOWN': '掌起镇', 'dataType': 'TT' },
+					{ 'NAME': '宁波市慈溪市CX绍兴舍', 'TYPE': 'SXT', 'LNG': 121.231211, 'LAT': 30.243295, 'COUNTY': '慈溪市', 'TOWN': '坎墩街道', 'dataType': 'TT' },
+					{ 'NAME': '宁波市慈溪市CX观城东北', 'TYPE': 'SXT', 'LNG': 121.435731, 'LAT': 30.189221, 'COUNTY': '慈溪市', 'TOWN': '观海卫镇', 'dataType': 'TT' },
+					{ 'NAME': '宁波慈溪掌起高速北', 'TYPE': 'SXT', 'LNG': 121.444706, 'LAT': 30.142795, 'COUNTY': '慈溪市', 'TOWN': '掌起镇', 'dataType': 'TT' },
+					{ 'NAME': '西山码头', 'TYPE': 'SXT', 'LNG': 121.111018, 'LAT': 30.271196, 'COUNTY': '慈溪市', 'TOWN': '慈溪市农垦场', 'dataType': 'TT' },
+					{ 'NAME': '宁波市江北区JB梅林水厂搬迁', 'TYPE': 'SXT', 'LNG': 121.551881, 'LAT': 29.924424, 'COUNTY': '江北区', 'TOWN': '庄桥街道', 'dataType': 'TT' },
+					{ 'NAME': '姚江公园', 'TYPE': 'SXT', 'LNG': 121.538843, 'LAT': 29.901664, 'COUNTY': '江北区', 'TOWN': '文教街道', 'dataType': 'TT' },
+				];
+				let feature_arr = [];
+				switch(areaLevel){
+					case 'city':
+						array_SXT.forEach((e) => {
+							if(!layerObj['物联网设备']) return;
+							layerObj['物联网设备'].forEach((e1) => {
+								if(sxtObj[e1] != e['dataType']) return;
+								
+								// 视频点要素
+								let feature_SXT = new ol.Feature({
+									geometry: new ol.geom.Point([e['LNG'], e['LAT']])
+								});
+								// 自定义属性设置
+								feature_SXT.setProperties(e);
+								feature_arr.push(feature_SXT);
+							});
+						});
+						break;
+					case 'county':
+						array_SXT.forEach((e) => {
+							if(e['COUNTY'] != areaName) return;
+							layerObj['物联网设备'].forEach((e1) => {
+								if(sxtObj[e1] != e['dataType']) return;
+								
+								// 视频点要素
+								let feature_SXT = new ol.Feature({
+									geometry: new ol.geom.Point([e['LNG'], e['LAT']])
+								});
+								// 自定义属性设置
+								feature_SXT.setProperties(e);
+								feature_arr.push(feature_SXT);
+							});
+						});
+						break;
+					case 'town':
+						array_SXT.forEach((e) => {
+							if(e['TOWN'] != areaName) return;
+							
+							layerObj['物联网设备'].forEach((e1) => {
+								if(sxtObj[e1] != e['dataType']) return;
+								
+								// 视频点要素
+								let feature_SXT = new ol.Feature({
+									geometry: new ol.geom.Point([e['LNG'], e['LAT']])
+								});
+								// 自定义属性设置
+								feature_SXT.setProperties(e);
+								feature_arr.push(feature_SXT);
+							});
+						});
+						break;
+					case 'lgq':
+						array_SXT.forEach((e) => {
+							if(e['TOWN'] != ZZTJ_LGQEX[areaName]['TOWN']) return;
+							
+							layerObj['物联网设备'].forEach((e1) => {
+								if(sxtObj[e1] != e['dataType']) return;
+								
+								// 视频点要素
+								let feature_SXT = new ol.Feature({
+									geometry: new ol.geom.Point([e['LNG'], e['LAT']])
+								});
+								// 自定义属性设置
+								feature_SXT.setProperties(e);
+								feature_arr.push(feature_SXT);
+							});
+						});
+						break;
+					default:
+						break;	
+				}
+				if(feature_arr.length) vector_SXT.getSource().addFeatures(feature_arr);	
+			}
+			/**
+			 * 根据行政区划添加点数据
+			 */
+			function addPoints(){
+				removeAllPoints();
+				
+				let arr = layerObj['产业基地点'];
+				arr.forEach((e) => {
+					// 特殊判断，暂无该点位数据
+					if(e === '食用植物油') return;
+					// 条件
+					let pointFeatures;
+					switch(areaLevel){
+						case 'city':
+							pointFeatures = new ol.format.GeoJSON().readFeatures(eval('geoJsonData_'+cyjddObj[e]), { featureProjection: 'EPSG:4326' });
+							break;
+						case 'county':
+							pointFeatures = new ol.format.GeoJSON().readFeatures(acolSearch.getGeoJsonFeaturesByKV(eval('geoJsonData_'+cyjddObj[e]),'COUNTY', areaName), { featureProjection: 'EPSG:4326' });
+							break;
+						case 'town':
+							pointFeatures = new ol.format.GeoJSON().readFeatures(acolSearch.getGeoJsonFeaturesByKV(eval('geoJsonData_'+cyjddObj[e]),'TOWN', areaName), { featureProjection: 'EPSG:4326' });
+							break;
+						case 'lgq':
+							pointFeatures = new ol.format.GeoJSON().readFeatures(acolSearch.getGeoJsonFeaturesByKV(eval('geoJsonData_'+cyjddObj[e]),'TOWN', ZZTJ_LGQEX[areaName]['TOWN']), { featureProjection: 'EPSG:4326' });
+							break;
+						default:
+							break;	
+					}
+					eval('vector_P_'+cyjddObj[e]).getSource().addFeatures(pointFeatures);
+				});
+			}
+			function removeAllPoints(){
+				// 遍历
+				cy_values.forEach((e) => {
+					eval('vector_P_'+e).getSource().clear();
+				});
+			}
+			/**
+			 * 根据配置信息修改图层
+			 */
+			function changeLayerByOption({name, obj}){
+				clear();
+				// 赋值
+				layerObj = obj;
+				
+				/**
+				 * 时间紧急，后期优化
+				 */
+				// 产业基地点
+				(layerObj['产业基地点'] && layerObj['产业基地点'].length) ? addPoints() : removeAllPoints();
+				// 产业基地面
+				if(layerObj['产业基地面'] && layerObj['产业基地面'].length){
+					acMap.hideLayerByNames(['粮食', '水蜜桃']);
+					layerObj['产业基地面'].forEach((e) => {
+						acMap.showLayerByName(e);
+					});
+				}else{
+					acMap.hideLayerByNames(['粮食', '水蜜桃']);
+				}
+				// 产业基地规划面
+				if(layerObj['产业基地规划面'] && layerObj['产业基地规划面'].length){
+					vector_PG.getSource().clear();
+					
+					//ghymbObj
+					layerObj['产业基地规划面'].forEach((e) => {
+						if(!ghymbObj[e]) return;
+						// color
+						let colorRGB = new acol_util().hexToRGB(ghymbObj[e].color);
+						// decodeGeoJson
+						let deGeoJson = new acol_dea().decodeGeoJson({ data: eval('geoJsonData_'+ghymbObj[e].name+'_PG') });
+						let polygonFeatures = new ol.format.GeoJSON().readFeatures(deGeoJson, { featureProjection: 'EPSG:4326' });
+						polygonFeatures.forEach((e) => {
+							let props = e.getProperties();
+							/**
+							 * 20220811
+							 * 生产力布局面图层，应急加入区划权限
+							 */
+							switch(areaLevel){
+								case 'city':
+								    e.setStyle(function (feature) {
+								    	let style_temp = new ol.style.Style({
+								    		fill: new ol.style.Fill({
+								    			color: 'rgba('+ colorRGB.R +','+ colorRGB.G +','+ colorRGB.B +', 0.5)',
+								    		}),
+								    		stroke: new ol.style.Stroke({
+								    			color: 'rgba('+ colorRGB.R +','+ colorRGB.G +','+ colorRGB.B +', 1)',
+								    			width: 1.5,
+								    		}),
+								    	});
+								    	return style_temp;
+								    });
+									break;
+								case 'county':
+									if(props['P_NAME'] === areaName){
+										e.setStyle(function (feature) {
+											let style_temp = new ol.style.Style({
+												fill: new ol.style.Fill({
+													color: 'rgba('+ colorRGB.R +','+ colorRGB.G +','+ colorRGB.B +', 0.5)',
+												}),
+												stroke: new ol.style.Stroke({
+													color: 'rgba('+ colorRGB.R +','+ colorRGB.G +','+ colorRGB.B +', 1)',
+													width: 1.5,
+												}),
+											});
+											return style_temp;
+										});
+									}else{
+										e.setStyle(null);
+									}
+									break;
+								default:
+									e.setStyle(null);
+									return;
+							}
+						});
+						vector_PG.getSource().addFeatures(polygonFeatures);
+					});
+				}else{
+					vector_PG.getSource().clear();
+				}
+				if(layerObj['竹子']){
+					// clear()
+					vector_ZZ.getSource().clear();
+					// 要素集合
+					let res_features = [];
+					if(ZLFB[layerObj['竹子']] && ZLFB[layerObj['竹子']].length){
+						ZLFB[layerObj['竹子']].forEach((e) => {
+							let res_json_feature = acolSearch.getGeoJsonFeaturesByKV(geoJsonData_town, 'NAME', e['area']);
+							if(res_json_feature.features.length){
+								// 属性信息
+								res_json_feature.features[0].properties = e;
+								//res_json_feature.features[0].properties['type'] = 'ZZ';
+								res_json_feature.features[0].properties['TYPE'] = 'ZZ';
+								let res_feature = new ol.format.GeoJSON().readFeatures(res_json_feature, { featureProjection: 'EPSG:4326' })[0];
+								/**
+								 *应急加入区划权限
+								 */
+								let props = res_feature.getProperties();
+								let colorRGB = getColorByValue(layerObj['竹子'], props['value']);
+								if(colorRGB){
+									switch(areaLevel){
+										case 'city':
+										    res_feature.setStyle(function(feature){
+										    	let style = new ol.style.Style({
+										    		fill: new ol.style.Fill({
+										    			color: 'rgba('+colorRGB.R+', '+colorRGB.G+', '+colorRGB.B+', 0.5)',
+										    		}),
+										    		stroke: new ol.style.Stroke({
+										    			color: 'rgba('+colorRGB.R+', '+colorRGB.G+', '+colorRGB.B+', 1)',
+										    			width: 1,
+										    		}),
+										    	});
+										    	return style;
+										    });
+											break;
+										case 'county':
+											if(props['COUNTY'] === areaName){
+												res_feature.setStyle(function(feature){
+													let style = new ol.style.Style({
+														fill: new ol.style.Fill({
+															color: 'rgba('+colorRGB.R+', '+colorRGB.G+', '+colorRGB.B+', 0.5)',
+														}),
+														stroke: new ol.style.Stroke({
+															color: 'rgba('+colorRGB.R+', '+colorRGB.G+', '+colorRGB.B+', 1)',
+															width: 1,
+														}),
+													});
+													return style;
+												});
+											}else{
+												res_feature.setStyle(null);
+											}
+											break;
+										default:
+											res_feature.setStyle(null);
+											return;
+									}
+								}else{
+									res_feature.setStyle(null);
+								}
+								// 集合添加
+								res_features.push(res_feature);
+							}
+						});
+					} 
+					// 添加要素
+					vector_ZZ.getSource().addFeatures(res_features);
+				}else{
+					vector_ZZ.getSource().clear();
+				}
+				// 物联网设备
+				(layerObj['物联网设备'] && layerObj['物联网设备'].length) ? addSXT() : vector_SXT.getSource().clear();
+				//花卉苗木
+				//(layerObj['花卉苗木'] && acolLayer.getLayerByName('花卉苗木_'+layerObj['花卉苗木'])) ? acMap.showLayerByName('花卉苗木_'+layerObj['花卉苗木']) : acMap.hideLayerByName('花卉苗木_'+layerObj['花卉苗木']);
+				// 特殊处理逻辑
+				if(layerObj['花卉苗木'] && acolLayer.getLayerByName('花卉苗木_'+layerObj['花卉苗木'])){
+					if(wmsLayer_humm_last) acMap.hideLayer(wmsLayer_humm_last);
+					
+					wmsLayer_humm_last = acolLayer.getLayerByName('花卉苗木_'+layerObj['花卉苗木']);
+					acMap.showLayer(wmsLayer_humm_last);
+				}else{
+					if(wmsLayer_humm_last) acMap.hideLayer(wmsLayer_humm_last);
+					wmsLayer_humm_last = null;
+				}
+				// 优化补入
+				(obj['优化补入']) ? acMap.showLayer(wmsLayer_yh) : acMap.hideLayer(wmsLayer_yh);
+				// 清理腾退
+				(obj['清理腾退']) ? acMap.showLayer(wmsLayer_qltt) : acMap.hideLayer(wmsLayer_qltt);
+				// 非粮化图斑
+				(obj['非粮化图斑']) ? acMap.showLayer(wmsLayer_flh) : acMap.hideLayer(wmsLayer_flh);
+				// 耕地
+				(obj['耕地']) ? acMap.showLayer(wmsLayer_gd) : acMap.hideLayer(wmsLayer_gd);
+				// 永久基本农田
+				(obj['永久基本农田']) ? acMap.showLayer(wmsLayer_yjjbnt) : acMap.hideLayer(wmsLayer_yjjbnt);
+				// 高标准农田
+				(obj['高标准农田']) ? acMap.showLayer(wmsLayer_gbznt) : acMap.hideLayer(wmsLayer_gbznt);
+				// 高标农内粮功区
+				(obj['高标农内粮功区']) ? acMap.showLayer(wmsLayer_gbnnlgq) : acMap.hideLayer(wmsLayer_gbnnlgq);
+				// 高标农外粮功区
+				(obj['高标农外粮功区']) ? acMap.showLayer(wmsLayer_gbnwlgq) : acMap.hideLayer(wmsLayer_gbnwlgq);
+				// 20220811 - 新增多个图层
+				(obj['耕地内永农']) ? acMap.showLayer(wmsLayer_gdnyn) : acMap.hideLayer(wmsLayer_gdnyn);
+				(obj['耕地外永农']) ? acMap.showLayer(wmsLayer_gdwyn) : acMap.hideLayer(wmsLayer_gdwyn);
+				(obj['耕地内高标农']) ? acMap.showLayer(wmsLayer_gdngbn) : acMap.hideLayer(wmsLayer_gdngbn);
+				(obj['耕地外高标农']) ? acMap.showLayer(wmsLayer_gdwgbn) : acMap.hideLayer(wmsLayer_gdwgbn);
+				(obj['永农内高标农']) ? acMap.showLayer(wmsLayer_ynngbn) : acMap.hideLayer(wmsLayer_ynngbn);
+				(obj['永农外高标农']) ? acMap.showLayer(wmsLayer_ynwgbn) : acMap.hideLayer(wmsLayer_ynwgbn);
+				(obj['耕地和永农内高标农']) ? acMap.showLayer(wmsLayer_gdhynngbn) : acMap.hideLayer(wmsLayer_gdhynngbn);
+				//(obj['耕地和永农外高标农']) ? acMap.showLayer(wmsLayer_gdhynwgbn) : acMap.hideLayer(wmsLayer_gdhynwgbn);
+				// 三调地类
+				(obj['三调地类']) ? acMap.showLayer(wmsLayer) : acMap.hideLayer(wmsLayer);
+				// 细分地类数组(全部按细分类型图层筛选)
+				let XFLX_arr = [];
+				let keyArr = Object.keys(obj['三调地类'] || {});
+				for(let i=0; i<keyArr.length; ++i){
+					XFLX_arr.push(...obj['三调地类'][keyArr[i]]);
+				}
+				let XFLX_filter = "XFLX IN ('"+XFLX_arr.join("','")+"')";
+				// updateWMS
+				wmsLayer.getSource().updateParams({
+					'CQL_FILTER': (area_filter) ? ("( "+XFLX_filter+" )" +" and "+area_filter) : (XFLX_filter)
+				});
+				layerUpdate = true;
+			}
+			/**
+			 * 根据名称修改区划
+			 * @param {String>} name
+			 */
+			function changeAreaByName(name){
+				let view = acMap.map.getView();
+				view.setMaxZoom(18);
+				view.setMinZoom(9);
+				
+				// 要素
+				let featureArr = [];
+				geoJson_area = null;
+				
+				// 根据行政区划名称获取要素信息
+				let res_feature = (getFeaturesByName(name));
+				if(geoJson_area){
+					clear();
+					// 当前区划信息
+					sendAreaInfoMessage(currentAreaInfo);
+
+					// 添加区划要素
+					if(res_feature) addFeaturesByObj(res_feature);
+					// 拼接筛选条件
+					area_filter = '';
+					// 根据行政区划等级判断执行逻辑
+					switch(areaLevel){
+						case 'city':
+						    area_filter = "";
+							break;
+						case 'county':
+							area_filter += "COUNTY IN ('"+areaName+"')";
+							break;
+						case 'town':
+							area_filter += "TOWN IN ('"+areaName+"')";
+							break;
+						case 'lgq':
+							area_filter += "(TOWN IN ('"+ZZTJ_LGQEX[areaName]["TOWN"]+"'))";
+							area_filter += " and (GHMC = '"+areaName+"')";
+							break;
+						default:
+							area_filter = "";
+					}
+					// 修改图层
+					changeLayerByOption({ name: '土地非农化', obj: layerObj });
+					// 天地图掩膜
+					tdtMaskByFeature(tdtType);
+					// 根据extent定位
+					if(areaLevel === 'city'){
+						view.setCenter([121.575210988279, 29.7373630365816]);
+						view.setZoom(10);
+					}else{
+						acolLayer.panToByExtent({
+							// 加入粮功区extent逻辑
+							extent: ((areaLevel === 'lgq') && ZZTJ_LGQEX[name]) ? ZZTJ_LGQEX[name]['EXTENT'] : vector.getSource().getExtent(),
+							duration: 500
+						}, () => {
+							view.setMinZoom(view.getZoom() - 1);
+						});
+					}
+				}
+			}
+			/**
+			 * 天地图图层掩膜
+			 */
+			function tdtMaskByFeature(type){
+				tdtType = type;
+				acMap.removeLayerByNames(['tdt_layer', 'tdt_label']);
+				// TDT
+				let tdt_layer;
+				let tdt_label;
+				if(type === 'img'){
+					tdt_layer = getNBTDTByType('img');
+					tdt_label = getNBTDTByType('label');
+					tdt_label.setZIndex(3);
+					tdt_label.setOpacity(0.01);
+				}else{
+					// 'key':'6a4522498e001c6ec374d880898dfacd'，'key':'887589c1776c20e51814bbd9009666d0'
+					tdt_layer = acolLayer.tdtLayer({ name: 'tdt_layer', type: tdtType, sourceType: 'XYZ', isLabel: false, zIndex: 0 });
+					tdt_label = acolLayer.tdtLayer({ name: 'tdt_label', type: tdtType, opacity: 0.01, sourceType: 'XYZ', isLabel: true, zIndex: 3 });
+				}
+				// 天地图掩膜，掩膜最上层图层即可
+				acolLayer.tdtLayerMaskByGeoJson({ layer: tdt_layer, data: geoJson_area });
+				acolLayer.tdtLayerMaskByGeoJson({ layer: tdt_label, data: geoJson_area });
+				acMap.addLayers([tdt_layer, tdt_label]);
+				// 图层修改标签样式
+				//vector.getSource().changed();
+				tdt_layer.setExtent(acolUtil.geoJsonBboxByTurf(geoJson_area));
+			}
+			/**
+			 * 加载宁波天地图服务
+			 */
+			function getNBTDTByType(type){
+				// 坐标系
+				let projection = ol.proj.get('EPSG:4326');
+				let projectionExtent = projection.getExtent();
+				// 比例尺
+				let resolutions = [0.703125, 0.3515625, 0.17578125, 0.087890625, 0.0439453125, 0.02197265625, 0.010986328125, 0.0054931640625, 0.00274658203125, 0.001373291015625, 0.0006866455078125, 0.00034332275390625, 0.000171661376953125, 0.0000858306884765625, 0.00004291534423828125, 0.000021457672119140625, 0.000010728836059570312, 0.000005364418029785156];
+				let matrixIds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
+				// 初始化图层
+				/* return new ol.layer.Tile({
+					name: (type === 'img') ? 'tdt_layer' : 'tdt_label',
+					type: 'tdtLayer',
+					source: new ol.source.WMTS({
+						//url: (type === 'img') ? 'https://www.nbmap.gov.cn/wmts/nbrmap202111' : 'https://www.nbmap.gov.cn/wmts/nbrmapannols', 
+						url: (type === 'img') ? 'https://www.nbmap.gov.cn/wmts/nbrmap202203' : 'https://www.nbmap.gov.cn/wmts/nbrmapannols', 
+						//format: 'tiles',
+						format: 'image/png',
+						layer: 'nbrmap',
+						matrixSet: 'c',
+						projection: projection,
+						tileGrid: new ol.tilegrid.WMTS({
+							origin: ol.extent.getTopLeft(projectionExtent),
+							resolutions: resolutions,
+							matrixIds: matrixIds
+						}), 
+						style: 'default',
+						wrapX: true
+					}),
+					zIndex: (type === 'img') ? 0 : 3
+				}); */
+				return new ol.layer.Tile({
+					name: (type === 'img') ? 'tdt_layer' : 'tdt_label',
+					type: 'tdtLayer',
+					source: new ol.source.WMTS({
+						url: (type === 'img') ? 'https://ditu.zjzwfw.gov.cn/services/wmts/imgmap/default/oss?token=6fa3f11f-d9d8-4ebf-a966-3eadf2b46fa0' : 'https://ditu.zjzwfw.gov.cn/services/wmts/imgmap_lab/default/oss?token=8932f5fd-c63f-49ec-a762-72e58d6a43ac', 
+						format: 'image/png',
+						layer: (type === 'img') ? 'imgmap' : 'imgmap_lab',
+						matrixSet: 'esritilematirx',
+						projection: projection,
+						tileGrid: new ol.tilegrid.WMTS({
+							origin: ol.extent.getTopLeft(projectionExtent),
+							resolutions: resolutions,
+							matrixIds: matrixIds
+						}), 
+						style: 'default',
+						wrapX: true,
+						crossOrigin: 'anonymous'
+					}),
+					zIndex: (type === 'img') ? 0 : 3
+				});
+			}
+			/**
+			 * 加载矢量数据图层
+			 */
+			function addVectorLayer(){
+				// 矢量区划图层
+				vector = new ol.layer.Vector({
+					name: 'area',
+					type: 'polygon',
+					source: new ol.source.Vector({
+						projection: 'EPSG:4326'
+					}),
+					style: function(feature){
+						let style_temp = new ol.style.Style({
+							image: new ol.style.Icon({
+								src: './data/image/CYZY/icon.png',
+								//anchor: [0.5,1],
+								anchor: [0.5,1.3],
+								scale: 1
+							}),
+							fill: new ol.style.Fill({ color: 'rgba(32, 178, 170, 0.01)' }),
+							stroke: new ol.style.Stroke({ color: 'rgba(109, 240, 249, 1)', width: 1 }),
+							text: new ol.style.Text({
+								text: feature.get('NAME'),
+								font: '18px Times New Roman',
+								overflow: false,
+								fill: new ol.style.Fill({ color: 'rgba(255, 255, 255, 1)' }),
+								stroke: (tdtType === 'img') ? new ol.style.Stroke({ color: 'rgba(109, 240, 249, 1)', width: 1 }) : new ol.style.Stroke({ color: 'rgba(0, 0, 0, 1)', width: 3 }),
+								offsetY: 0,
+								backgroundStroke: new ol.style.Stroke({ color: 'rgba(0, 191, 255, 0.01)', width: 1 }),
+								backgroundFill: new ol.style.Fill({ color: 'rgba(0, 191, 255, 0.01)' }),
+								padding: [2, 1, 1, 2]
+							})
+						});
+						return style_temp;
+					},
+					zIndex: 5,
+					declutter: false
+				});
+				// 高亮图层
+				vector_HL = acolLayer.vectorLayer({ name: 'area_HL',type: 'polygon',style: { fill: { color: 'rgba(0, 255, 255, 0.2)'}, stroke: { color: 'rgba(0, 255, 255, 1)', width: 3, lineCap: 'square',lineDash: [3, 5] } }, zIndex: 6 });
+				// 摄像头
+				vector_SXT = new ol.layer.Vector({
+					name: 'SXT',
+					type: 'point',
+					source: new ol.source.Vector({
+						projection: 'EPSG:4326'
+					}),
+					style: function(feature){
+						let style_temp = new ol.style.Style({
+							image: new ol.style.Icon({
+								src: './data/image/CYZY/'+feature.get('dataType')+'.png',
+								anchor: [0.5, 1],
+								scale: 0.7
+							})
+						});
+						return style_temp;
+					},
+					zIndex: 4,
+					declutter: false
+				});
+				// 矢量点
+				vector_P_SHUI = acolLayer.vectorLayer({ name: 'SHUI', type: 'point', zIndex: 4, visible: true });
+				vector_P_SHU = acolLayer.vectorLayer({ name: 'SHU', type: 'point', zIndex: 4, visible: true });
+				vector_P_XM = acolLayer.vectorLayer({ name: 'XM', type: 'point', zIndex: 4, visible: true });
+				vector_P_CCY = acolLayer.vectorLayer({ name: 'CCY', type: 'point', zIndex: 4, visible: true });
+				vector_P_JGLTQY = acolLayer.vectorLayer({ name: 'JGLTQY', type: 'point', zIndex: 4, visible: true });
+				vector_P_NJL = acolLayer.vectorLayer({ name: 'NJL', type: 'point', zIndex: 4, visible: true });
+				vector_P_HZS = acolLayer.vectorLayer({ name: 'HZS', type: 'point', zIndex: 4, visible: true });
+				vector_P_JTNC = acolLayer.vectorLayer({ name: 'JTNC', type: 'point', zIndex: 4, visible: true });
+				vector_P_NYQY = acolLayer.vectorLayer({ name: 'NYQY', type: 'point', zIndex: 4, visible: true });
+				vector_P_DH = acolLayer.vectorLayer({ name: 'DH', type: 'point', zIndex: 4, visible: true });
+				vector_P_QT = acolLayer.vectorLayer({ name: 'QT', type: 'point', zIndex: 4, visible: true });
+				// 规划面
+				vector_PG = acolLayer.vectorLayer({ name: '产业规划面', type: 'polygon', zIndex: 2, visible: true });
+				// 竹子
+				vector_ZZ = acolLayer.vectorLayer({ name: '竹子', type: 'polygon', zIndex: 2, visible: true });
+				// 添加图层
+				acMap.addLayers([vector, vector_HL, vector_SXT, vector_PG, vector_ZZ]);
+				acMap.addLayers([vector_P_XM, vector_P_SHUI, vector_P_SHU, vector_P_CCY, vector_P_JGLTQY, vector_P_NJL]);
+				acMap.addLayers([vector_P_HZS, vector_P_JTNC, vector_P_NYQY, vector_P_DH, vector_P_QT]);
+			}
+			/**
+			 * 高亮
+			 * @param {Object} data
+			 */
+			function addHLFeature(data){
+				// filter
+				let XFLX_filter = "XFLX = '"+ data.properties["XFLX"] +"'";
+				wmsLayer_HL.getSource().updateParams({
+					'CQL_FILTER': (area_filter) ? (XFLX_filter +" and "+area_filter) : (XFLX_filter)
+				});
+				wmsLayer_HL.getSource().refresh();
+				acMap.showLayer(wmsLayer_HL);
+			}
+			/**
+			 * 加载WMS图层
+			 */
+			function addWMSLayer(){
+				let mapUrl = 'https://geoserver.zjsszxc.com/geoserver/NBJSC/wms';
+				// 奉化粮食
+				wmsLayer_ls = acolLayer.wmsLayer({ name: '粮食', mapUrl: mapUrl, mapName: 'NBJSC:粮食', zIndex: 2, tiled: true, visible: false });
+				// 奉化水蜜桃
+				wmsLayer_smt = acolLayer.wmsLayer({ name: '水蜜桃', mapUrl: 'https://geoserver.zjsszxc.com/geoserver/FHJSC/wms', mapName: 'FHJSC:tao_csq', zIndex: 2, tiled: true, visible: false });
+				// 花卉苗木_2020
+				wmsLayer_humm_2020 = acolLayer.wmsLayer({ name: '花卉苗木_2020', mapUrl: mapUrl, mapName: 'NBJSC:花卉苗木_2020', zIndex: 2, tiled: true, visible: false });
+				// 耕地变更调查
+				wmsLayer_gd = acolLayer.wmsLayer({ name: '耕地变更调查', mapUrl: mapUrl, mapName: 'NBJSC:耕地变更调查', zIndex: 2, tiled: true, visible: false });
+				// 永久基本农田
+				wmsLayer_yjjbnt = acolLayer.wmsLayer({ name: '永久基本农田', mapUrl: mapUrl, mapName: 'NBJSC:永久基本农田', zIndex: 2, tiled: true, visible: false });
+				// 高标准农田
+				wmsLayer_gbznt = acolLayer.wmsLayer({ name: '高标准农田', mapUrl: mapUrl, mapName: 'NBJSC:高标准农田', zIndex: 2, tiled: true, visible: false });
+				// 粮功区
+				wmsLayer = acolLayer.wmsLayer({ name: '土地非农化', mapUrl: mapUrl, mapName: 'NBJSC:土地非农化新', zIndex: 2, visible: false });
+				wmsLayer_HL = acolLayer.wmsLayer({ name: '土地非农化新(高亮)', mapUrl: mapUrl, mapName: 'NBJSC:土地非农化新(高亮)', zIndex: 2, visible: false });
+				// 高标外粮功区
+				wmsLayer_gbnwlgq = acolLayer.wmsLayer({ name: '高标外粮功区', mapUrl: mapUrl, mapName: 'NBJSC:高标农外粮功区', zIndex: 2, tiled: true, visible: false });
+				wmsLayer_gbnnlgq = acolLayer.wmsLayer({ name: '高标内粮功区', mapUrl: mapUrl, mapName: 'NBJSC:高标农内粮功区', zIndex: 2, tiled: true, visible: false });
+				// 20220811 - 新增多个图层
+				// 耕地内永农
+				wmsLayer_gdnyn = acolLayer.wmsLayer({ name: '耕地内永农', mapUrl: mapUrl, mapName: 'NBJSC:耕地内永农', zIndex: 2, tiled: true, visible: false });
+				// 耕地外永农
+				wmsLayer_gdwyn = acolLayer.wmsLayer({ name: '耕地外永农', mapUrl: mapUrl, mapName: 'NBJSC:耕地外永农', zIndex: 2, tiled: true, visible: false });
+				// 耕地内高标农
+				wmsLayer_gdngbn = acolLayer.wmsLayer({ name: '耕地内高标农', mapUrl: mapUrl, mapName: 'NBJSC:耕地内高标农', zIndex: 2, tiled: true, visible: false });
+				// 耕地外高标农
+				wmsLayer_gdwgbn = acolLayer.wmsLayer({ name: '耕地外高标农', mapUrl: mapUrl, mapName: 'NBJSC:耕地外高标农', zIndex: 2, tiled: true, visible: false });
+				// 永农内高标农
+				wmsLayer_ynngbn = acolLayer.wmsLayer({ name: '永农内高标农', mapUrl: mapUrl, mapName: 'NBJSC:永农内高标农', zIndex: 2, tiled: true, visible: false });
+				// 永农外高标农
+				wmsLayer_ynwgbn = acolLayer.wmsLayer({ name: '永农外高标农', mapUrl: mapUrl, mapName: 'NBJSC:永农外高标农', zIndex: 2, tiled: true, visible: false });
+				// 耕地和永农内高标农
+				wmsLayer_gdhynngbn = acolLayer.wmsLayer({ name: '耕地和永农内高标农', mapUrl: mapUrl, mapName: 'NBJSC:耕地和永农内高标农', zIndex: 2, tiled: true, visible: false });
+				// 耕地和永农外高标农
+				//wmsLayer_gdhynwgbn = acolLayer.wmsLayer({ name: '耕地和永农外高标农', mapUrl: mapUrl, mapName: 'NBJSC:耕地和永农外高标农', zIndex: 2, tiled: true, visible: false });
+				// 非粮化
+				wmsLayer_flh = acolLayer.wmsLayer({ name: '非粮化', mapUrl: mapUrl, mapName: 'NBJSC:非粮化', zIndex: 2, tiled: true, visible: false });
+				// 腾退、补入
+				wmsLayer_qltt = acolLayer.wmsLayer({ name: '清理腾退', mapUrl: mapUrl, mapName: 'NBJSC:清理腾退', zIndex: 2, tiled: true, visible: false });
+				wmsLayer_yh = acolLayer.wmsLayer({ name: '优化补入', mapUrl: mapUrl, mapName: 'NBJSC:优化补入', zIndex: 2, tiled: true, visible: false });
+				// 添加图层
+				acMap.addLayers([
+					wmsLayer_ls, 
+					wmsLayer_smt, 
+					wmsLayer_humm_2020,
+					wmsLayer_gd, 
+					wmsLayer_yjjbnt, 
+					wmsLayer, 
+					wmsLayer_gbznt, 
+					wmsLayer_gbnnlgq, 
+					wmsLayer_gbnwlgq, 
+					wmsLayer_gdhynngbn,
+					wmsLayer_ynwgbn,
+					wmsLayer_ynngbn,
+					wmsLayer_gdwgbn,
+					wmsLayer_gdngbn,
+					wmsLayer_gdwyn,
+					wmsLayer_gdnyn,
+					wmsLayer_flh, 
+					wmsLayer_qltt, 
+					wmsLayer_yh, 
+					wmsLayer_HL
+				]);
+			}
+			/**
+			 * 创建叠加图层
+			 * @param {Object} element
+			 */
+			function addPopupByElement(element){
+				if(acolLayer.getOverlayById('infoWindow')) acolLayer.removeOverlayById('infoWindow');
+				// 添加overLayer图层
+				overLayer = acolLayer.overLayer({ id: 'infoWindow', element: element, offset: [5, -92], positioning: 'top-left' });
+				acMap.map.addOverlay(overLayer);
+			}
+			/**
+			 * 打开气泡弹窗
+			 * @param {Object} info
+			 * @param {Object} lonlat
+			 */
+			function openPopupByInfo(info,lonlat){
+				closePopup();
+			
+				let allArea = 0;
+				if(areaLevel === 'lgq'){
+					if(ZZTJ_LGQ[areaName][info.XFLX]) allArea = ZZTJ_LGQ[areaName][info.XFLX];
+				}else{
+					if(ZZTJ_XFLX[areaLevel][areaName][info.XFLX]) allArea = ZZTJ_XFLX[areaLevel][areaName][info.XFLX];
+				}
+				let pHtml =  '<p>'+
+							 '<span>地块类型</span>'+
+							 '<span>'+ ((info.DKLX === '农业用地') || (info.XFLX === '养殖坑塘') ? '农业用地' : '非农业用地') +'</span>'+
+							 '</p>'+
+							 '<p>'+
+							 '<span>细分类型</span>'+
+							 '<span>'+ (info.XFLX) +'</span>'+
+							 '</p>'+
+							 '<p>'+
+							 '<span>所属区划</span>'+
+							 '<span>'+ (areaName) +'</span>'+
+							 '</p>'+
+							 '<p>'+
+							 '<span>面积</span>'+
+							 '<span>'+ (((parseFloat((allArea * 0.0015).toFixed(2)) < 0.01) ? 0.01 : parseFloat((allArea * 0.0015).toFixed(2))) +'亩') +'</span>'+
+							 '</p>';
+							 
+				// 清空div子元素
+				$('#infoWindow').empty();
+				$('#infoWindow').append(pHtml);
+				// 定位显示
+				overLayer.setPosition(lonlat);
+			}
+			/**
+			 * 关闭气泡弹窗
+			 */
+			function closePopup(){
+				// 弹窗气泡
+				if(overLayer) overLayer.setPosition(undefined);
+			}
+			/**
+			 * 获取区划等级
+			 * @param {String} name
+			 */
+			function getAreaLevelByName(name){
+				if(!name) return null;
+				if(ZZTJ_LGQEX[name]) return 'lgq';
+				if(name === '宁波市'){
+					return 'city';
+				}else if(['海曙区', '江北区', '北仑区', '镇海区', '鄞州区', '奉化区', '象山县', '宁海县', '余姚市', '慈溪市'].indexOf(name) != -1){
+					return 'county';
+				}
+				return 'town';
+			}
+			/**
+			 * 根据区划名称获取要素
+			 * @param {String} name
+			 */
+			function getFeaturesByName(name){
+				// 根据行政区划等级判断执行逻辑
+				switch(getAreaLevelByName(name)){
+					case 'city':
+						areaName = name;
+					    areaLevel = 'city';
+						geoJson_area = geoJsonData_city;
+						geoJson_areaNext = acolSearch.getGeoJsonFeaturesByKV(geoJsonData_county, 'P_NAME', name);
+						geoJson_areaPoints = null;
+						// 当前区划信息
+						currentAreaInfo = acolUtil.objDeepCopy(geoJson_area.features[0].properties);
+						
+						return { geoJson_areaNext: geoJson_areaNext, geoJson_areaPoints: geoJson_areaPoints };
+					case 'county':
+						areaName = name;
+						areaLevel = 'county';
+						geoJson_area = acolSearch.getGeoJsonFeaturesByKV(geoJsonData_county, 'NAME', name);
+						geoJson_areaNext = acolSearch.getGeoJsonFeaturesByKV(geoJsonData_town, 'P_NAME', name);
+						geoJson_areaPoints = null;
+						// 当前区划信息
+						currentAreaInfo = acolUtil.objDeepCopy(geoJson_area.features[0].properties);
+						
+						return { geoJson_areaNext: geoJson_areaNext, geoJson_areaPoints: geoJson_areaPoints };
+					case 'town':
+						areaName = name;
+						areaLevel = 'town';
+						geoJson_area = acolSearch.getGeoJsonFeaturesByKV(geoJsonData_town, 'NAME', name);
+						// 当前区划信息
+						currentAreaInfo = acolUtil.objDeepCopy(geoJson_area.features[0].properties);
+						
+						// 名称置空
+						if(geoJson_area.features.length) geoJson_area.features[0].properties['NAME'] = '';
+						if(geoJson_area.features[0].geometry.type === 'MultiPolygon'){
+							geoJson_areaLine = turf.polygonToLine(geoJson_area.features[0]);
+						}else if(geoJson_area.features[0].geometry.type === 'Polygon'){
+							geoJson_areaLine = turf.featureCollection([turf.polygonToLine(geoJson_area.features[0])]);
+						}
+						
+						geoJson_areaPoints = acolSearch.getGeoJsonFeaturesByKV(geoJsonData_lgqPoints, 'TOWN', name);
+						return { geoJson_areaNext: geoJson_areaLine, geoJson_areaPoints: geoJson_areaPoints };
+					case 'lgq':
+						areaName = name;
+						areaLevel = 'lgq';
+						geoJson_area = acolSearch.getGeoJsonFeaturesByKV(geoJsonData_town, 'NAME', ZZTJ_LGQEX[name]['TOWN']);
+						
+						// 名称置空
+						if(geoJson_area.features.length) geoJson_area.features[0].properties['NAME'] = '';
+						if(geoJson_area.features[0].geometry.type === 'MultiPolygon'){
+							geoJson_areaLine = turf.polygonToLine(geoJson_area.features[0]);
+						}else if(geoJson_area.features[0].geometry.type === 'Polygon'){
+							geoJson_areaLine = turf.featureCollection([turf.polygonToLine(geoJson_area.features[0])]);
+						}
+						geoJson_areaPoints = acolSearch.getGeoJsonFeaturesByKV(geoJsonData_lgqPoints, 'ANAME', name);
+						
+						// 当前区划信息
+						currentAreaInfo = acolUtil.objDeepCopy(geoJson_areaPoints.features[0].properties);
+						currentAreaInfo['NAME'] = currentAreaInfo['ANAME'];
+						currentAreaInfo['P_NAME'] = currentAreaInfo['TOWN'];
+						currentAreaInfo['type'] = 'lgq';
+						
+						return { geoJson_areaNext: geoJson_areaLine, geoJson_areaPoints: geoJson_areaPoints };
+					default:
+						//console.log('数据有误');
+						return null;
+				}
+			}
+			
+			/**
+			 * 添加要素
+			 */
+			function addFeaturesByObj({ geoJson_areaNext, geoJson_areaPoints }){
+				// 清空
+				vector.getSource().clear();
+				vector_HL.getSource().clear();
+				// area_next
+				if(geoJson_areaNext && geoJson_areaNext.features.length){
+					let areaFeatures = new ol.format.GeoJSON().readFeatures(geoJson_areaNext, { featureProjection: 'EPSG:4326' });
+					vector.getSource().addFeatures(areaFeatures);
+				}
+				// village_point
+				if(geoJson_areaPoints && geoJson_areaPoints.features.length){
+					let pointsFeatures = new ol.format.GeoJSON().readFeatures(geoJson_areaPoints, { featureProjection: 'EPSG:4326' });
+					vector.getSource().addFeatures(pointsFeatures);
+				}
+			}
+			
+			/**
+			 * 父页面消息交互 - areaInfo
+			 * @param {Object} props
+			 */
+			function sendAreaInfoMessage(props){
+				let message;
+				switch(props['type']){
+					case 'city':
+					    message = {
+					    	'key':'areaInfo',
+					    	'value': {
+					    		'areaInfo': {
+									PROVINCE: props['P_NAME'],
+					    			CITY: props['NAME'],
+									LEVEL: 'city'
+					    		},
+					    	}
+					    };
+						break;
+					case 'county':
+						message = {
+							'key':'areaInfo',
+							'value': {
+								'areaInfo': {
+									CITY: props['P_NAME'],
+									COUNTY: props['NAME'],
+									LEVEL: 'county'
+								},
+							}
+						};
+						break;
+					case 'town':
+						message = {
+							'key':'areaInfo',
+							'value': {
+								'areaInfo': {
+									COUNTY: props['P_NAME'],
+									TOWN: props['NAME'],
+									LEVEL: 'town'
+								},
+							}
+						};
+						break;
+					case 'lgq':
+						message = {
+							'key':'areaInfo',
+							'value': {
+								'areaInfo': {
+									COUNTY: props['COUNTY'],
+									TOWN: props['TOWN'],
+									GHMC: props['NAME'],
+									LEVEL: 'lgq'
+								},
+							}
+						};
+						break;
+					default:
+						return;
+				}
+				sendMessage('gisLayerMessage', message);
+			}
+			/**
+			 * 获取颜色
+			 * @param {String} layerType
+			 * @param {Number} value
+			 */
+			function getColorByValue(layerType, value){
+				let temp_obj = ZZObj[layerType];
+				if(temp_obj){
+					for(key in temp_obj){
+						let range = key.split('-');
+						if((value >= parseInt(range[0])) && (value < parseInt(range[1]))){
+							return acolUtil.hexToRGB(temp_obj[key]);
+						}
+					}
+					return null;
+				}
+				return null;
+			}
+			/**
+			 * 清空
+			 */
+			function clear(){
+				// 隐藏wms高亮图层
+				acMap.hideLayer(wmsLayer_HL);
+				// 关闭气泡
+				closePopup();
+			}
+		</script>
+	</body>
+</html>

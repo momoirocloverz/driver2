@@ -1,0 +1,118 @@
+@keyframes words_loop {
+  0% {
+    transform: translateY(30%);
+  }
+  100% {
+    transform: translateY(-60%);
+  }
+}
+
+@keyframes fade-in-out {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes recycle {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+@keyframes recycle_reverse {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(-360deg);
+  }
+}
+@keyframes words_loop_row {
+  0% {
+    transform: translateX(200px);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes panel_left_in {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+@keyframes panel_left_out {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-120%);
+  }
+}
+
+@keyframes panel_right_in {
+  0% {
+    transform: translateX(120%);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+@keyframes panel_right_out {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes panel_bottom_in {
+  0% {
+    transform: translateY(120%);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+@keyframes panel_bottom_out {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(120%);
+  }
+}
+
+
+@keyframes icon_animate {
+  0% {
+    margin-top: 22px;
+  }
+  50% {
+    margin-top: 15px;
+  }
+  100% {
+    opacity: 22px;
+  }
+}
+
+@keyframes icon_opacity {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 1;
+  }
+}

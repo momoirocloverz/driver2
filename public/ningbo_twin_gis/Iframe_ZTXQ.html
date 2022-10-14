@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <title>专题详情</title>
+	<!-- WEB -->
+	<script type="text/javascript" src="./plugin/web/jquery/jquery.min.js"></script>
+	<link href="./plugin/web/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+	<script type="text/javascript" src="./plugin/web/bootstrap/js/bootstrap.min.js"></script>
+	<style type="text/css">
+		#toolbar {
+			position: absolute;
+			top: 20px;
+			left: 20px;
+			width: 260px;
+			text-align: center;
+			z-index: 9999;
+			border-radius: 4px;
+		}
+	</style>
+    <script type="text/javascript">
+		if (window.addEventListener) {
+		    //为window注册message事件并绑定监听函数
+		    window.addEventListener('message', receiveMsg, false);
+		}else {
+		    window.attachEvent('message', receiveMsg);
+		}
+		//监听函数，接收一个参数--Event事件对象
+		function receiveMsg(e) {
+			let obj = e.data;
+		    // 地图交互消息监听
+		    if(obj.type == "gisMapMessage"){
+		    	if(obj.data.key == "initInfo" && obj.data.value){
+					// initType为true时，map初始化成功
+		    		console.log("initInfo交互---地图加载完成",obj.data.value.initType);
+					
+					// 地图初始化完成，执行后续逻辑
+					layerInitByArr();
+		    	}
+		    }
+		}
+		// 发送消息
+		function sendMessage(type,data){
+			// 向子页面传递消息
+			let iframe = document.getElementById("gisIframe");
+			iframe.contentWindow.postMessage({type: type, data: data}, '*');
+		}
+	</script>
+</head>
+<body style="margin:0;overflow:hidden;width:100%;height:100%;position:absolute;top:0;background-color:transparent;">
+<div id="toolbar" class="panel panel-primary">
+	<div class='panel-heading'>
+		<h5 class='panel-title text-center'>功能交互</h5>
+	</div>
+	<div class='panel-body content'>
+		<input type="button" class="btn btn-default" onclick="layerControl({ name: '粮功区', visible: true })" value="图层(显示)"></input>
+		<input type="button" class="btn btn-default" onclick="layerControl({ name: '粮功区', visible: false })" value="图层(隐藏)"></input>
+	</div>
+</div>
+<iframe id="gisIframe" src="./YGPT_ZTXQ.html" style="width:100%;height:100%;background-color:transparent;border:rgba(255,255,255,0);"></iframe>
+	<script>
+		/**
+		 * 初始化图层组
+		 */
+		function layerInitByArr(){
+			let mapUrl = 'https://geoserver.zjsszxc.com/geoserver/NBJSC/wms';
+			// 加载图层组
+			let layersArr = [
+				{ name: '耕地', type: 'WMS', mapUrl: mapUrl, mapName: 'NBJSC:耕地变更调查', opacity: 1, visible: false, minZoom: 0, maxZoom: 18, zIndex: 1, tiled: true },
+				{ name: '永久基本农田', type: 'WMS', mapUrl: mapUrl, mapName: 'NBJSC:永久基本农田', opacity: 1, visible: false, minZoom: 0, maxZoom: 18, zIndex: 2, tiled: true },
+				{ name: '高标准农田', type: 'WMS', mapUrl: mapUrl, mapName: 'NBJSC:高标准农田', opacity: 1, visible: false, minZoom: 0, maxZoom: 18, zIndex: 3, tiled: true },
+				{ name: '粮功区', type: 'WMS', mapUrl: mapUrl, mapName: 'NBJSC:土地非农化新', opacity: 1, visible: true, minZoom: 0, maxZoom: 18, zIndex: 4, tiled: true },
+			];
+			let message = { "key": "layerInitByArr", "value": { "layerArr": layersArr } };
+			sendMessage('gisLayerMessage', message);
+		}
+		/**
+		 * 图层控制
+		 */
+		function layerControl(option){
+			let message = { "key": "layerControl", "value": { "option": option } };
+			sendMessage('gisLayerMessage', message);
+		}
+	</script>
+</html>

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <title>NBJSC - NMNC</title>
+	<!-- WEB -->
+	<script type="text/javascript" src="./plugin/web/jquery/jquery.min.js"></script>
+	<link href="./plugin/web/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+	<script type="text/javascript" src="./plugin/web/bootstrap/js/bootstrap.min.js"></script>
+	<style type="text/css">
+		#toolbar {
+			position: absolute;
+			top: 20px;
+			right: 20px;
+			width: 260px;
+			text-align: center;
+			z-index: 9999;
+			border-radius: 4px;
+		}
+		#toolbar1 {
+			position: absolute;
+			top: 20px;
+			left: 20px;
+			width: 260px;
+			text-align: center;
+			z-index: 9999;
+			border-radius: 4px;
+		}
+		#toolbar2 {
+			position: absolute;
+			top: 140px;
+			left: 20px;
+			width: 260px;
+			text-align: center;
+			z-index: 9999;
+			border-radius: 4px;
+		}
+		#toolbar3 {
+			position: absolute;
+			top: 260px;
+			left: 20px;
+			width: 260px;
+			text-align: center;
+			z-index: 9999;
+			border-radius: 4px;
+		}
+	</style>
+    <script type="text/javascript">
+		if (window.addEventListener) {
+		    //为window注册message事件并绑定监听函数
+		    window.addEventListener('message', receiveMsg, false);
+		}else {
+		    window.attachEvent('message', receiveMsg);
+		}
+		//监听函数，接收一个参数--Event事件对象
+		function receiveMsg(e) {
+			let obj = e.data;
+		    // 地图交互消息监听
+		    if(obj.type == "gisMapMessage"){
+		    	if(obj.data.key == "initInfo" && obj.data.value){
+					// initType为true时，map初始化成功
+		    		console.log("initInfo交互---地图加载完成",obj.data.value.initType);
+					
+					// 初始区划等级
+					changeAreaByName('宁波市');
+		    	}else if(obj.data.key == 'measureByType' && obj.data.value){
+					// 量测结果监听
+					// 距离量测单位：米(m)，面积量测单位：平方米(㎡)
+					console.log('测量类型：'+ obj.data.value.measureType +' ,测量结果：'+ obj.data.value.measureResult);
+				}
+		    }else if(obj.type == "gisLayerMessage"){
+				if(obj.data.key == "areaInfo" && obj.data.value){
+					// areaInfo
+					console.log("areaInfo交互 --- 行政区划信息",obj.data.value.areaInfo);
+				}else if(obj.data.key == "pointInfo" && obj.data.value){
+					console.log("pointInfo交互 --- ",obj.data.value.pointInfo);
+				}
+			}
+		}
+		// 发送消息
+		function sendMessage(type,data){
+			// 向子页面传递消息
+			let iframe = document.getElementById("gisIframe");
+			iframe.contentWindow.postMessage({type: type, data: data},'*');
+		}
+	</script>
+</head>
+<body style="margin:0;overflow:hidden;width:100%;height:100%;position:absolute;top:0;background-color:transparent;background: url(./data/image/back.png);">
+<div id="toolbar2" class="panel panel-primary">
+	<div class='panel-heading'>
+		<h5 class='panel-title text-center'>图层复选</h5>
+	</div>
+	<div class='panel-body content'>
+		<input type="button" class="btn btn-default" onclick="changeLayerByOption(obj)" value="全选"></input>
+		<input type="button" class="btn btn-default" onclick="changeLayerByOption(obj1)" value="全空"></input>
+	</div>
+</div>
+<div id="toolbar1" class="panel panel-primary">
+	<div class='panel-heading'>
+		<h5 class='panel-title text-center'>功能交互</h5>
+	</div>
+	<div class='panel-body content'>
+		<input type="button" class="btn btn-default" onclick="lastArea()" value="返回"></input>
+	</div>
+</div>
+<div id="toolbar" class="panel panel-primary">
+	<div class='panel-heading'>
+		<h5 class='panel-title text-center'>行政区划</h5>
+	</div>
+	<div class='panel-body content'>
+		<div class='panel'>
+			<div class='input-group'>
+				<span class='input-group-addon'>名称</span>
+				<select id='areaSelect' class='form-control'>
+					<option value="宁波市">宁波市</option>
+					<option value="镇海区">镇海区</option>
+					<option value="骆驼街道">骆驼街道</option>
+				</select>
+			</div>
+		</div>
+	</div>
+</div>
+<div id="toolbar3" class="panel panel-primary">
+	<div class='panel-heading'>
+		<h5 class='panel-title text-center'>量测交互</h5>
+	</div>
+	<div class='panel-body content'>
+		<!-- <input type="button" class="btn btn-default" onclick="lastArea()" value="返回"></input> -->
+		<input type="button" class="btn btn-default" onclick="measureByType('Point')" value="点位获取"></input>
+		<input type="button" class="btn btn-default" onclick="measureByType('LineString')" value="距离量测"></input>
+		<input type="button" class="btn btn-default" onclick="measureByType('Polygon')" value="多边形量测"></input>
+		<input type="button" class="btn btn-default" onclick="measureByType('Circle')" value="圆量测"></input>
+		<input type="button" class="btn btn-default" onclick="measureByType('Rectangle')" value="矩形量测"></input>
+		<input type="button" class="btn btn-default" onclick="closeMeasure()" value="关闭量测"></input>
+		<input type="button" class="btn btn-default" onclick="clearMeasure()" value="绘制清除"></input>
+	</div>
+</div>
+<iframe id="gisIframe" src="./NBJSC_NMNC.html" style="width:100%;height:100%;background-color:transparent;border:rgba(255,255,255,0);"></iframe>
+	<script>
+		// 下拉框交互
+		$("#areaSelect").change(function(){
+			// 根据行政区划编码修改矢量图层
+			changeAreaByName($("#areaSelect").val());
+		});
+		
+		/**
+		 * 村庄：新时代美丽乡村达标村、未来乡村、小集镇式中心村、梳理式改造村、省特色精品村
+		 */
+		let obj = {
+				// 互斥图层(单选)
+			//'村庄': '未来乡村',
+			//'农资分布': '农资分布',
+			'乡村物流': '乡村物流',
+				// 可叠加图层(多选)
+			'示范镇': true,
+			'示范带': true,
+			'精品线路': '2022',
+			'乡村振兴学院': true,
+			'集体三资': true,
+			'乡村旅游': ['景区', '旅行社', '酒店', '餐馆', '农家乐', '景点旅游路线', '购物商店']
+		};
+		let obj1 = {
+			'村庄': '',
+			'农资分布': '',
+			'乡村物流': '',
+			'示范镇': false,
+			'示范带': false,
+			'精品线路': '',
+			'乡村振兴学院': false,
+			'集体三资': false,
+			'乡村旅游': []
+		};
+		
+		/**
+		 * 修改图层
+		 * @param {Object} obj 
+		 */
+		function changeLayerByOption(obj){
+			let message = { 'key': 'changeLayerByOption', 'value': { 'option':{ obj } } };
+			sendMessage('gisLayerMessage', message);
+		}
+		/**
+		 * 返回上级行政区划
+		 */
+		function lastArea(){
+			let message = { 'key': 'lastArea','value': { 'lastArea': true } };
+			sendMessage('gisLayerMessage', message);
+		}
+		/**
+		 * 修改区划
+		 * @param {String} name --> '宁波市','镇海区','骆驼街道'
+		 * !!!!!! 暂仅支持 '市'、'县'、'镇' 三级区划修改
+		 */
+		function changeAreaByName(name){
+			let message = { 'key': 'changeAreaByName', 'value': { 'name': name } };
+			sendMessage('gisLayerMessage', message);
+		}
+		/**
+		 * 选择量测类型
+		 * @param {String} type
+		 */
+		function measureByType(type){
+			let message = { 'key': 'measureByType', 'value':{ 'measureByType': type } };
+			sendMessage('gisMapMessage', message);
+		}
+		/**
+		 * 关闭量测功能
+		 */
+		function closeMeasure(){
+			let message = { 'key': 'closeMeasure', 'value': { 'closeMeasure': true } };
+			sendMessage('gisMapMessage', message);
+		}
+		/**
+		 * 清除量测结果
+		 */
+		function clearMeasure(){
+			let message = { 'key': 'clearMeasure', 'value': { 'clearMeasure': true } };
+			sendMessage('gisMapMessage', message);
+		}
+	</script>
+</html>
